@@ -74,3 +74,5 @@ Bill type is configured with document custom-field API name `cf_bill_type`. The 
 ## Failed-save diagnostics
 
 A failed save expands a copyable debug report below the error in the review dialog. It contains the exact approved POST payload, ERP code and complete response body/SDK envelope, selected Godown, source invoice lines, packing and custom-field mappings. Authentication keys are redacted. Reports stay in page memory; copying does not transmit them. If Zoho supplies only a generic error, the report preserves that limitation rather than inventing a field-level cause.
+
+The tenant-confirmed numeric IDs are now used in REST creation payloads: Bill type `4160832000001021023`, Bill No `4160832000001016028`, Ref Bill Date `4160832000001015010`. API names remain in configuration for reference; numeric IDs take precedence. Live creation must be retried in Zoho to confirm whether this resolves error code 6.

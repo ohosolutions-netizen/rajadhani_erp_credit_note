@@ -5,7 +5,7 @@
   "customFields": {
     "billType": {
       "label": "Bill type",
-      "id": "",
+      "id": "4160832000001021023",
       "required": true,
       "apiName": "cf_bill_type"
     },
@@ -27,12 +27,12 @@
   "lineCustomFields": {
     "billNo": {
       "label": "BillNO",
-      "id": "",
+      "id": "4160832000001016028",
       "apiName": "cf_billno"
     },
     "billDate": {
       "label": "Ref_Bill Date",
-      "id": "",
+      "id": "4160832000001015010",
       "apiName": "cf_ref_bill_date"
     }
   },

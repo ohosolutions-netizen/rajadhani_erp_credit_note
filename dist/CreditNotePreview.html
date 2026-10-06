@@ -221,7 +221,7 @@ aside{min-width:0;overflow:visible;align-self:stretch}
 <script nomodule>document.body.textContent='Please open this widget in a current browser.';</script><script>// Preview fixtures only. This file is never included in the ERP widget ZIP.
 (() => {
 const fields = {
- billType:{label:'Bill type',apiName:'cf_bill_type',required:true},billCreatedBy:{label:'Bill created by',id:'demo-user',required:true},transport:{label:'Transport',id:'demo-transport',required:true},agent:{label:'Agent name',id:'demo-agent'},vehicle:{label:'Vehicle number',id:'demo-vehicle'},whatsapp:{label:'WhatsApp number',id:'demo-whatsapp'},mobile:{label:'Mobile number',id:'demo-mobile',required:true},shippingPhone:{label:'Shipping phone',id:'demo-shipphone'}
+ billType:{label:'Bill type',id:'4160832000001021023',apiName:'cf_bill_type',required:true},billCreatedBy:{label:'Bill created by',id:'demo-user',required:true},transport:{label:'Transport',id:'demo-transport',required:true},agent:{label:'Agent name',id:'demo-agent'},vehicle:{label:'Vehicle number',id:'demo-vehicle'},whatsapp:{label:'WhatsApp number',id:'demo-whatsapp'},mobile:{label:'Mobile number',id:'demo-mobile',required:true},shippingPhone:{label:'Shipping phone',id:'demo-shipphone'}
 };
 for (const key of ['transport','agent','vehicle','billCreatedBy','mobile','shippingPhone']) delete fields[key];
 const lookups = {
@@ -598,7 +598,7 @@ class ERP {
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const config = {"apiBase":"https://www.zohoapis.in/erp/v3","connectionLinkName":"erp_admin","organizationId":"","customFields":{"billType":{"label":"Bill type","id":"","required":true,"apiName":"cf_bill_type"},"whatsapp":{"label":"WhatsApp number","id":"","required":false}},"itemFields":{"mu":"","ratio":""},"lookupSources":{},"requireSalesperson":true,"requireLocation":true,"invoiceQuantityMode":"pieces","organizationStateCode":"KL","lineCustomFields":{"billNo":{"label":"BillNO","id":"","apiName":"cf_billno"},"billDate":{"label":"Ref_Bill Date","id":"","apiName":"cf_ref_bill_date"}},"defaultGodownName":"Rajadhani"};
+const config = {"apiBase":"https://www.zohoapis.in/erp/v3","connectionLinkName":"erp_admin","organizationId":"","customFields":{"billType":{"label":"Bill type","id":"4160832000001021023","required":true,"apiName":"cf_bill_type"},"whatsapp":{"label":"WhatsApp number","id":"","required":false}},"itemFields":{"mu":"","ratio":""},"lookupSources":{},"requireSalesperson":true,"requireLocation":true,"invoiceQuantityMode":"pieces","organizationStateCode":"KL","lineCustomFields":{"billNo":{"label":"BillNO","id":"4160832000001016028","apiName":"cf_billno"},"billDate":{"label":"Ref_Bill Date","id":"4160832000001015010","apiName":"cf_ref_bill_date"}},"defaultGodownName":"Rajadhani"};
 if (window.RAJADHANI_PREVIEW_CONFIG) Object.assign(config, window.RAJADHANI_PREVIEW_CONFIG);
 const api = new ERP(config, window.ZFAPPS);
 const state = { customer: null, warehouses: [], lines: [], taxes: [], currency: 'INR', busy: false, saved: false, allowClose: false, uncertain: false, customerVersion: 0, pendingOperations: 0, pendingSO: { item: null, rows: [], loading: false, error: '' } };
