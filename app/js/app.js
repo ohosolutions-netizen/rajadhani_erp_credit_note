@@ -93,7 +93,18 @@ function focusDiscount(index, force=false) {
 }
 function renderLines(focusIndex = null, focusItems = false) {
   $('emptyItems').hidden = !!state.lines.length;
-  $('lineItems').innerHTML = state.lines.map((l,i) => l.notFound ? `<tr data-line="${i}" class="notfoundline"><td>${i+1}</td><td colspan="13"><strong>Item not found</strong><small>Scanned value: ${esc(l.scanText || l.sku || '')}. Check the barcode/item code in ERP.</small></td><td><button class="remove" type="button" data-remove="${i}" aria-label="Remove item not found warning">×</button></td></tr>` : `<tr data-line="${i}" class="${l.loading ? 'loadingline' : ''}"><td>${i+1}</td><td class="itemname"><strong>${esc(l.name)}</strong><small>${esc(l.sku || 'No SKU')} · HSN ${esc(l.hsn_or_sac || '—')}</small>${l.loading ? '<small class="loadingnote">Loading ERP item details…</small>' : ''}${l.packingError ? `<small class="packingerror">${esc(l.packingError)}</small>${l.itemDebug ? `<button class="debugcopy" type="button" data-debug="${i}">Copy item response</button>` : ''}` : ''}</td><td><button type="button" class="button billbutton" data-bill="${i}" ${l.loading ? 'disabled' : ''}>${esc(l.sourceBill?.number || 'Select bill')}</button></td><td>${esc(l.sourceBill?.reference || '—')}</td><td>${esc(l.sourceBill?.date || '—')}</td><td>${esc(l.stock ?? '—')}<small>${esc(l.mu || l.unit || 'units')}</small></td><td>${l.loading ? '…' : esc(l.pieces || '—')}</td><td><input type="number" min="0.001" step="any" value="${l.quantity}" data-row="${i}" data-field="quantity" aria-label="Quantity for ${esc(l.name)}" required></td><td data-piece="${i}">${l.loading ? '…' : l.pieces ? l.pieces*l.quantity : '—'}</td><td><input type="number" min="0" step="0.01" value="${l.rate}" data-row="${i}" data-field="rate" aria-label="Rate for ${esc(l.name)}" required></td><td><input type="number" min="0" max="100" step="any" value="${l.discount ?? 0}" data-row="${i}" data-field="discount" aria-label="Discount percent for ${esc(l.name)}" ${l.loading ? 'disabled' : ''}></td><td class="right" data-discount="${i}">${l.loading ? '…' : esc(money(lineAmounts(l).discount))}</td><td><select data-row="${i}" data-field="tax" aria-label="Tax for ${esc(l.name)}" disabled><option value="">${l.loading ? 'Loading…' : l.tax_exemption_id ? 'ERP exempt' : 'Select tax'}</option>${state.taxes.map(t=>`<option value="${esc(t.id)}" ${String(l.tax?.id)===String(t.id)?'selected':''}>${esc(t.name)} (${t.percentage}%)</option>`).join('')}</select></td><td class="right" data-amount="${i}">${l.loading ? '…' : esc(money(lineAmounts(l).taxable))}</td><td><button class="remove" type="button" data-remove="${i}" aria-label="Remove ${esc(l.name)}">×</button></td></tr>`).join('');
+  $('lineItems').innerHTML = state.lines.map((l,i) => l.notFound ? `<tr data-line="${i}" class="notfoundline"><td colspan="10">Item not found: ${esc(l.scanText || l.sku)} <button type="button" data-remove="${i}" aria-label="Remove item not found warning">Dismiss</button></td></tr>` : `<tr data-line="${i}" class="${l.loading ? 'loadingline' : ''}">
+    <td title="${esc(l.name)}${l.packingError ? ' — '+esc(l.packingError) : ''}">${esc(l.sku || l.item_id)}${l.packingError ? '<span title="Check item packing"> ⚠</span>' : ''}</td>
+    <td><button type="button" class="button billbutton" data-bill="${i}" title="${esc(l.sourceBill?.number || 'Select bill')}" ${l.loading ? 'disabled' : ''}>${esc(l.sourceBill?.number || 'Select bill')}</button></td>
+    <td title="${esc(l.sourceBill?.reference)}">${esc(l.sourceBill?.reference || '—')}</td>
+    <td>${esc(l.sourceBill?.date || '—')}</td>
+    <td>${l.loading ? '…' : esc(l.pieces || '—')}</td>
+    <td><input type="number" min="0.001" step="any" value="${l.quantity}" data-row="${i}" data-field="quantity" aria-label="Quantity for ${esc(l.name)}" required></td>
+    <td><input type="number" min="0" step="0.01" value="${l.rate}" data-row="${i}" data-field="rate" aria-label="Rate for ${esc(l.name)}" required></td>
+    <td><input type="number" min="0" max="100" step="any" value="${l.discount ?? 0}" data-row="${i}" data-field="discount" aria-label="Discount percent for ${esc(l.name)}" ${l.loading ? 'disabled' : ''}></td>
+    <td title="${esc(l.tax?.name || '')}"><select data-row="${i}" data-field="tax" aria-label="Tax for ${esc(l.name)}" disabled><option>${l.loading ? '…' : l.tax ? esc(l.tax.percentage)+'%' : l.tax_exemption_id ? 'Exempt' : '—'}</option></select></td>
+    <td class="right" data-amount="${i}" title="${esc(money(lineAmounts(l).taxable))}">${l.loading ? '…' : esc(money(lineAmounts(l).taxable))}</td>
+  </tr>`).join('');
   totals();
   if (!state.lines.length) loadPendingSO(null);
   if (focusIndex != null || focusItems) focusInvoiceItems(focusIndex);
@@ -102,8 +113,7 @@ $('lineItems').addEventListener('input', e => {
   const {row,field} = e.target.dataset; if (row == null || !field) return;
   const l=state.lines[Number(row)]; if (!l || l.notFound) return; l[field] = field === 'discount' && e.target.value === '' ? undefined : field === 'tax' ? state.taxes.find(t=>String(t.id) === e.target.value) : Number(e.target.value);
   document.querySelector(`[data-amount="${row}"]`).textContent = money(lineAmounts(l).taxable);
-  document.querySelector(`[data-discount="${row}"]`).textContent = money(lineAmounts(l).discount);
-  document.querySelector(`[data-piece="${row}"]`).textContent = l.pieces ? Math.round(l.pieces*l.quantity*1000)/1000 : '—'; totals();
+  totals();
 });
 $('lineItems').addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.dataset.field === 'discount') { e.preventDefault(); $('itemSearch').focus(); }

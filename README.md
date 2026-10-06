@@ -54,3 +54,7 @@ After a confirmed save, inputs lock and the widget opens the created Credit Note
 - [Invoices API: transaction listing and detail](https://www.zoho.com/erp/api/v3/invoices/)
 
 This repository is a fresh Credit Note source history. The copied Invoice/Edit Invoice packages and old Git remotes/history are not included.
+
+## Compact green item grid
+
+The item grid contains only Item Code, Bill No, Ref Bill No, Ref Bill Date, Pieces / pack, Order Qty, Rate, Disc %, Tax and Amount. All ten columns fit the panel without horizontal scrolling. Smaller ERP windows place the summary below the form to give the grid the full width. Item names are available on hover over the item code. Amount remains the discounted amount before tax; quantity and per-piece rate calculations are unchanged.
