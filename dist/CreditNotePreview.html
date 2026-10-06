@@ -215,7 +215,7 @@ aside{min-width:0;overflow:visible;align-self:stretch}
 <section class="card itemsCard" id="invoiceItemsCard"><div class="sectionheading"><div><span class="step">02</span><h2>Credit Note items</h2><span id="lineCount" class="count">0</span></div><span class="subtle">Prices & stock from ERP</span></div><div class="cardbody"><div class="itemsearchrow"><div class="searchfield grow"><label class="sr-only" for="itemSearch">Search items</label><div class="searchbox"><span>⌕</span><input id="itemSearch" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="itemResults" placeholder="Search an item, SKU or scan a barcode…"><kbd>↵</kbd></div><div id="itemResults" class="results" role="listbox" hidden></div></div><button type="button" class="button" id="browseItems" hidden>＋ Browse items</button></div></div>
 <div class="tablewrap"><table><thead><tr><th>Item Code</th><th>Bill No</th><th>Ref Bill No</th><th>Ref Bill Date</th><th>Pieces / pack</th><th>Order Qty</th><th>Rate</th><th>Disc %</th><th>Tax</th><th>Amount</th></tr></thead><tbody id="lineItems"></tbody></table><div id="emptyItems" class="empty"><div class="emptyicon">▧</div><h3>Your credit note starts here</h3><p>Find an item above to add it to this credit note.</p><span>Search by name or SKU · Barcode scanner ready</span></div></div><div class="tablefooter"><span id="qtySummary">0 items · 0 total quantity</span><span>Amounts exclude tax</span></div></section>
 </div><aside><section class="card summary"><div class="sectionheading"><h2>Credit Note summary</h2><span class="currency" id="currencyLabel">INR</span></div><div class="cardbody"><div class="field"><label for="location">Godown <em>*</em></label><select id="location" required disabled><option value="">Loading warehouses…</option></select><small id="godownStatus" role="status"></small></div><div class="field remarks"><label for="notes">Remarks</label><textarea id="notes" rows="2" placeholder="Return reason or remarks"></textarea></div><div class="sideblocktitle summarytitle">Summary information</div><div class="summarygrid"><div class="summaryrow"><span>Total</span><strong id="subtotal">₹0.00</strong></div><div class="summaryrow"><span>Total Discount Amount</span><span class="green" id="discountAmount">− ₹0.00</span></div><div class="summaryrow"><span>Tax Amount</span><span id="taxTotal">₹0.00</span></div><div id="taxBreakdown"></div><div class="summaryrow"><span>Round off</span><span id="roundValue">₹0.00</span></div><div class="summaryrow billamount"><span>Credit Amount</span><strong id="grandTotal">₹0.00</strong></div></div><small id="totalDetail" class="totaldetail">0 items in this credit note</small><button class="button primary full" id="saveButton" type="submit">Submit credit note <span>→</span></button></div></section></aside></div></form><footer><span id="footerStatus">Zoho ERP widget</span></footer></main>
-<dialog id="reviewDialog"><div class="dialogheading"><div><div class="eyebrow">READY FOR A QUICK CHECK</div><h2>Review your credit note</h2></div><button type="button" class="iconbutton" data-close="reviewDialog" aria-label="Close review">×</button></div><div id="reviewContent"></div><div class="dialogactions"><button type="button" class="button" data-close="reviewDialog">Back to editing</button><button type="button" class="button primary" id="confirmSave">Save draft to ERP →</button></div><p id="saveStatus" role="status"></p><details id="saveDebug" hidden><summary>Save debug report</summary><p>Includes transaction details and remarks. Authentication values are redacted.</p><textarea id="saveDebugText" readonly aria-label="Save debug report" spellcheck="false"></textarea><button type="button" class="button" id="copySaveDebug">Copy debug report</button><span id="debugCopyStatus" role="status"></span></details></dialog>
+<dialog id="reviewDialog"><div class="dialogheading"><div><div class="eyebrow">READY FOR A QUICK CHECK</div><h2>Review your credit note</h2></div><button type="button" class="iconbutton" data-close="reviewDialog" aria-label="Close review">×</button></div><div id="reviewContent"></div><div class="dialogactions"><button type="button" class="button" data-close="reviewDialog">Back to editing</button><button type="button" class="button primary" id="confirmSave">Save draft to ERP →</button></div><p id="saveStatus" role="status"></p><details id="saveDebug" hidden><summary>Save debug report</summary><p>Includes transaction details and remarks. Authentication values are redacted.</p><textarea id="saveDebugText" readonly aria-label="Save debug report" spellcheck="false"></textarea><button type="button" class="button" id="inspectSaveDebug">Inspect ERP records (read only)</button><button type="button" class="button" id="copySaveDebug">Copy debug report</button><span id="debugCopyStatus" role="status"></span></details></dialog>
 <dialog id="billDialog" aria-labelledby="billTitle"><div class="dialogheading"><h2 id="billTitle">Item transactions</h2><button type="button" class="iconbutton" data-close="billDialog" aria-label="Close bills">×</button></div><label for="billFilter">Find bill or date</label><input id="billFilter" type="search" placeholder="Bill number, reference or date"><p id="billStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Bill No.</th><th>Reference</th><th>Date</th><th>Status</th><th>Billed qty</th><th>Rate</th><th></th></tr></thead><tbody id="billRows"></tbody></table></div></dialog>
 <dialog id="settingsDialog"><div class="dialogheading"><h2>ERP connection</h2><button class="iconbutton" type="button" data-close="settingsDialog" aria-label="Close settings">×</button></div><p>Use an authorized Zoho connection. Never enter passwords or access tokens here.</p><div class="field"><label for="connectionName">Connection link name</label><input id="connectionName" placeholder="Your authorized connection link name"></div><div class="field"><label for="orgId">Organization ID</label><input id="orgId" placeholder="Detected from Zoho ERP"></div><p class="subtle">These settings apply to this session. For deployment, update app/config.json and the manifest’s usedConnections. Business-field mappings are configured in app/config.json.</p><button type="button" class="button primary" id="connectButton">Connect & load ERP data</button></dialog>
 <script nomodule>document.body.textContent='Please open this widget in a current browser.';</script><script>// Preview fixtures only. This file is never included in the ERP widget ZIP.
@@ -518,7 +518,7 @@ class ERP {
       if (!(err instanceof Error)) err = Object.assign(new Error(typeof err === 'string' ? err : err?.message || 'SDK request failed'), {sdkError: err});
       err.requestDiagnostics = {method, url: options.url, query: Object.fromEntries(options.url_query.map(q=>[q.key,q.value])), payload, response: response ?? err.sdkError ?? err.response ?? err.data ?? null, originalMessage: err.message};
       if (/not authorized|permission|oauth|scope/i.test(err.message || '')) {
-        const scope = path.startsWith('/contacts') ? 'ERP.contacts.READ' : path.startsWith('/salesorders') ? 'ERP.salesorders.READ' : path.startsWith('/creditnotes') ? 'ERP.creditnotes.CREATE' : path.startsWith('/invoices') ? 'ERP.invoices.READ' : 'ERP.settings.READ';
+        const scope = path.startsWith('/contacts') ? 'ERP.contacts.READ' : path.startsWith('/salesorders') ? 'ERP.salesorders.READ' : path.startsWith('/creditnotes') ? (method === 'GET' ? 'ERP.creditnotes.READ' : 'ERP.creditnotes.CREATE') : path.startsWith('/invoices') ? 'ERP.invoices.READ' : 'ERP.settings.READ';
         err.message = `Access denied for ${path}. Check ${scope} in erp_admin, reauthorize the connection for the current user, and verify access to organization ${this.config.organizationId}.`;
       }
       throw err;
@@ -593,7 +593,28 @@ class ERP {
     }
     return rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   }
-  createCreditNote(payload) { return this.request('/creditnotes', {}, 'POST', payload); }
+  createCreditNote(payload) {
+    const invoices = [...new Set(payload.line_items.map(line=>line.invoice_id).filter(Boolean))];
+    const query = {ignore_auto_number_generation: false};
+    if (invoices.length === 1 && payload.line_items.every(line=>line.invoice_id === invoices[0])) query.invoice_id = invoices[0];
+    return this.request('/creditnotes', query, 'POST', payload);
+  }
+  async inspectCreation(payload) {
+    const checks = [];
+    const read = async (label, path, query={}) => {
+      try { const data=await this.request(path,query); checks.push({label,path,query,data}); return data; }
+      catch(e) { checks.push({label,path,query,error:e.message,response:e.erpResponse || e.requestDiagnostics?.response || null}); return null; }
+    };
+    await read('Customer', `/contacts/${encodeURIComponent(payload.customer_id)}`);
+    const invoices=[...new Set(payload.line_items.map(l=>l.invoice_id).filter(Boolean))];
+    for(const id of invoices.slice(0,5)) await read('Source invoice', `/invoices/${encodeURIComponent(id)}`);
+    const items=[...new Set(payload.line_items.map(l=>l.item_id).filter(Boolean))];
+    for(const id of items.slice(0,5)) await read('Item master', `/items/${encodeURIComponent(id)}`);
+    const list=await read('Existing Credit Notes for this customer', '/creditnotes', {customer_id:payload.customer_id,page:1,per_page:10});
+    const existing=list?.creditnotes?.find(c=>String(c.customer_id)===String(payload.customer_id));
+    if(existing?.creditnote_id) await read('Existing Credit Note details', `/creditnotes/${encodeURIComponent(existing.creditnote_id)}`);
+    return {readOnly:true,limit:'First five unique source invoices/items; one existing Credit Note for the same customer, if available.',checks};
+  }
 }
 
 const $ = id => document.getElementById(id);
@@ -998,11 +1019,12 @@ $('invoiceForm').addEventListener('submit',e=>{
   $('reviewContent').innerHTML=`<div class="summaryrow"><span>Customer</span><strong>${esc(state.customer.contact_name)}</strong></div><div class="summaryrow"><span>Credit Note date</span><strong>${esc(v.date)}</strong></div><div class="summaryrow"><span>Godown</span><strong>${esc(selectedGodown()?.location_name || '')}</strong></div>${state.lines.map(l=>`<div class="summaryrow"><span>${esc(l.name)} · Bill ${esc(l.sourceBill?.number)} (${esc(l.sourceBill?.date)}) · ${l.quantity} × ${l.pieces ?? "?"} = ${l.pieces ? pieceQuantity(l) : "?"} pieces · ${l.discount ?? 0}% discount (${esc(money(lineAmounts(l).discount))})</span><strong>${esc(money(lineAmounts(l).taxable))}</strong></div>`).join('')}<div class="summaryrow"><span>Total Discount Amount</span><strong>${esc(money(t.discount))}</strong></div><div class="grandtotal"><span>Estimated credit note total</span><strong>${esc(money(t.total))}</strong></div><p>This creates a draft credit note. It does not email the customer. ERP will calculate the final total.</p>`;
   $('saveStatus').textContent='';$('confirmSave').disabled=!!window.RAJADHANI_PREVIEW_CONFIG;if(window.RAJADHANI_PREVIEW_CONFIG)$('saveStatus').textContent='Preview only. No records will be created.';$('reviewDialog').showModal();
 });
+let saveDiagnosticReport = null;
 function showSaveDiagnostics(err) {
   const report = {
-    widget: 'Rajadhani Credit Note', diagnosticVersion: 1, time: new Date().toISOString(),
+    widget: 'Rajadhani Credit Note', diagnosticVersion: 2, time: new Date().toISOString(),
     error: {message: err.message, name: err.name, code: err.erpCode ?? null, apiRejected: !!err.apiRejected},
-    request: {method: 'POST', url: `${config.apiBase}/creditnotes`, organizationId: config.organizationId, payload: approvedPayload},
+    request: {method: 'POST', url: `${config.apiBase}/creditnotes`, organizationId: config.organizationId, query: err.requestDiagnostics?.query || {}, payload: approvedPayload},
     response: err.erpResponse ?? err.requestDiagnostics?.response ?? api.lastCreateResponse ?? null,
     sdk: err.requestDiagnostics ? {originalMessage: err.requestDiagnostics.originalMessage, envelope: err.requestDiagnostics.response} : null,
     configuration: {quantityMode: config.invoiceQuantityMode, lineCustomFields: config.lineCustomFields, customFields: config.customFields},
@@ -1010,10 +1032,25 @@ function showSaveDiagnostics(err) {
     sourceLines: state.lines.map((line,index)=>({row:index+1,itemId:line.item_id,code:line.sku,orderQuantity:line.quantity,piecesPerPack:line.pieces,rate:line.rate,discount:line.discount,tax:line.tax,sourceBill:line.sourceBill})),
     note: 'Includes customer IDs, transaction data and entered notes. Authentication values are redacted. No data is sent by copying this report.'
   };
+  saveDiagnosticReport=report;
   $('saveDebugText').value=diagnosticJSON(report);
   $('saveDebug').hidden=false; $('saveDebug').open=true;
   $('debugCopyStatus').textContent='';
 }
+$('inspectSaveDebug').onclick=async()=>{
+  if(!saveDiagnosticReport || state.busy) return;
+  const report=saveDiagnosticReport;
+  $('inspectSaveDebug').disabled=true;
+  $('debugCopyStatus').textContent='Reading ERP records for comparison…';
+  try {
+    report.inspection=await api.inspectCreation(report.request.payload);
+    if(saveDiagnosticReport===report) {
+      $('saveDebugText').value=diagnosticJSON(report);
+      $('debugCopyStatus').textContent='Inspection complete. Copy the updated debug report. No records were changed.';
+    }
+  } catch(e) { $('debugCopyStatus').textContent=`Inspection failed: ${e.message}`; }
+  finally { $('inspectSaveDebug').disabled=false; }
+};
 $('copySaveDebug').onclick=async()=>{
   const text=$('saveDebugText').value;
   try { await navigator.clipboard.writeText(text); $('debugCopyStatus').textContent='Debug report copied.'; }

@@ -46,7 +46,7 @@ export class ERP {
       if (!(err instanceof Error)) err = Object.assign(new Error(typeof err === 'string' ? err : err?.message || 'SDK request failed'), {sdkError: err});
       err.requestDiagnostics = {method, url: options.url, query: Object.fromEntries(options.url_query.map(q=>[q.key,q.value])), payload, response: response ?? err.sdkError ?? err.response ?? err.data ?? null, originalMessage: err.message};
       if (/not authorized|permission|oauth|scope/i.test(err.message || '')) {
-        const scope = path.startsWith('/contacts') ? 'ERP.contacts.READ' : path.startsWith('/salesorders') ? 'ERP.salesorders.READ' : path.startsWith('/creditnotes') ? 'ERP.creditnotes.CREATE' : path.startsWith('/invoices') ? 'ERP.invoices.READ' : 'ERP.settings.READ';
+        const scope = path.startsWith('/contacts') ? 'ERP.contacts.READ' : path.startsWith('/salesorders') ? 'ERP.salesorders.READ' : path.startsWith('/creditnotes') ? (method === 'GET' ? 'ERP.creditnotes.READ' : 'ERP.creditnotes.CREATE') : path.startsWith('/invoices') ? 'ERP.invoices.READ' : 'ERP.settings.READ';
         err.message = `Access denied for ${path}. Check ${scope} in erp_admin, reauthorize the connection for the current user, and verify access to organization ${this.config.organizationId}.`;
       }
       throw err;
@@ -121,5 +121,26 @@ export class ERP {
     }
     return rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   }
-  createCreditNote(payload) { return this.request('/creditnotes', {}, 'POST', payload); }
+  createCreditNote(payload) {
+    const invoices = [...new Set(payload.line_items.map(line=>line.invoice_id).filter(Boolean))];
+    const query = {ignore_auto_number_generation: false};
+    if (invoices.length === 1 && payload.line_items.every(line=>line.invoice_id === invoices[0])) query.invoice_id = invoices[0];
+    return this.request('/creditnotes', query, 'POST', payload);
+  }
+  async inspectCreation(payload) {
+    const checks = [];
+    const read = async (label, path, query={}) => {
+      try { const data=await this.request(path,query); checks.push({label,path,query,data}); return data; }
+      catch(e) { checks.push({label,path,query,error:e.message,response:e.erpResponse || e.requestDiagnostics?.response || null}); return null; }
+    };
+    await read('Customer', `/contacts/${encodeURIComponent(payload.customer_id)}`);
+    const invoices=[...new Set(payload.line_items.map(l=>l.invoice_id).filter(Boolean))];
+    for(const id of invoices.slice(0,5)) await read('Source invoice', `/invoices/${encodeURIComponent(id)}`);
+    const items=[...new Set(payload.line_items.map(l=>l.item_id).filter(Boolean))];
+    for(const id of items.slice(0,5)) await read('Item master', `/items/${encodeURIComponent(id)}`);
+    const list=await read('Existing Credit Notes for this customer', '/creditnotes', {customer_id:payload.customer_id,page:1,per_page:10});
+    const existing=list?.creditnotes?.find(c=>String(c.customer_id)===String(payload.customer_id));
+    if(existing?.creditnote_id) await read('Existing Credit Note details', `/creditnotes/${encodeURIComponent(existing.creditnote_id)}`);
+    return {readOnly:true,limit:'First five unique source invoices/items; one existing Credit Note for the same customer, if available.',checks};
+  }
 }

@@ -40,3 +40,15 @@ test('selected Godown overrides source location and line fields preserve bill nu
  assert.ok(core.validateCreditNote(state,values,missing).some(e=>e.includes('BillNO')));
  assert.throws(()=>core.makePayload(state,values,missing),/BillNO/);
 });
+
+test('single-invoice create includes invoice context; mixed invoices do not get a false context',async()=>{
+ const api=new ERP({},{}),calls=[];api.request=async(...args)=>{calls.push(args);return {};};
+ const payload={line_items:[{invoice_id:'inv1'},{invoice_id:'inv1'}]};await api.createCreditNote(payload);
+ assert.deepEqual(calls[0],['/creditnotes',{ignore_auto_number_generation:false,invoice_id:'inv1'},'POST',payload]);
+ await api.createCreditNote({line_items:[{invoice_id:'inv1'},{invoice_id:'inv2'}]});assert.equal(calls[1][1].invoice_id,undefined);
+});
+test('inspection only reads bounded source records and records permission failures',async()=>{
+ const api=new ERP({},{}),calls=[];api.request=async(path,query,method)=>{calls.push({path,method});if(path==='/creditnotes')throw Error('Missing READ scope');return {code:0};};
+ const inspection=await api.inspectCreation({customer_id:'c1',line_items:[{invoice_id:'inv1',item_id:'it1'},{invoice_id:'inv1',item_id:'it1'}]});
+ assert.equal(inspection.readOnly,true);assert.equal(calls.length,4);assert.ok(calls.every(c=>c.method===undefined));assert.match(inspection.checks.at(-1).error,/READ scope/);
+});

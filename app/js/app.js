@@ -402,11 +402,12 @@ $('invoiceForm').addEventListener('submit',e=>{
   $('reviewContent').innerHTML=`<div class="summaryrow"><span>Customer</span><strong>${esc(state.customer.contact_name)}</strong></div><div class="summaryrow"><span>Credit Note date</span><strong>${esc(v.date)}</strong></div><div class="summaryrow"><span>Godown</span><strong>${esc(selectedGodown()?.location_name || '')}</strong></div>${state.lines.map(l=>`<div class="summaryrow"><span>${esc(l.name)} · Bill ${esc(l.sourceBill?.number)} (${esc(l.sourceBill?.date)}) · ${l.quantity} × ${l.pieces ?? "?"} = ${l.pieces ? pieceQuantity(l) : "?"} pieces · ${l.discount ?? 0}% discount (${esc(money(lineAmounts(l).discount))})</span><strong>${esc(money(lineAmounts(l).taxable))}</strong></div>`).join('')}<div class="summaryrow"><span>Total Discount Amount</span><strong>${esc(money(t.discount))}</strong></div><div class="grandtotal"><span>Estimated credit note total</span><strong>${esc(money(t.total))}</strong></div><p>This creates a draft credit note. It does not email the customer. ERP will calculate the final total.</p>`;
   $('saveStatus').textContent='';$('confirmSave').disabled=!!window.RAJADHANI_PREVIEW_CONFIG;if(window.RAJADHANI_PREVIEW_CONFIG)$('saveStatus').textContent='Preview only. No records will be created.';$('reviewDialog').showModal();
 });
+let saveDiagnosticReport = null;
 function showSaveDiagnostics(err) {
   const report = {
-    widget: 'Rajadhani Credit Note', diagnosticVersion: 1, time: new Date().toISOString(),
+    widget: 'Rajadhani Credit Note', diagnosticVersion: 2, time: new Date().toISOString(),
     error: {message: err.message, name: err.name, code: err.erpCode ?? null, apiRejected: !!err.apiRejected},
-    request: {method: 'POST', url: `${config.apiBase}/creditnotes`, organizationId: config.organizationId, payload: approvedPayload},
+    request: {method: 'POST', url: `${config.apiBase}/creditnotes`, organizationId: config.organizationId, query: err.requestDiagnostics?.query || {}, payload: approvedPayload},
     response: err.erpResponse ?? err.requestDiagnostics?.response ?? api.lastCreateResponse ?? null,
     sdk: err.requestDiagnostics ? {originalMessage: err.requestDiagnostics.originalMessage, envelope: err.requestDiagnostics.response} : null,
     configuration: {quantityMode: config.invoiceQuantityMode, lineCustomFields: config.lineCustomFields, customFields: config.customFields},
@@ -414,10 +415,25 @@ function showSaveDiagnostics(err) {
     sourceLines: state.lines.map((line,index)=>({row:index+1,itemId:line.item_id,code:line.sku,orderQuantity:line.quantity,piecesPerPack:line.pieces,rate:line.rate,discount:line.discount,tax:line.tax,sourceBill:line.sourceBill})),
     note: 'Includes customer IDs, transaction data and entered notes. Authentication values are redacted. No data is sent by copying this report.'
   };
+  saveDiagnosticReport=report;
   $('saveDebugText').value=diagnosticJSON(report);
   $('saveDebug').hidden=false; $('saveDebug').open=true;
   $('debugCopyStatus').textContent='';
 }
+$('inspectSaveDebug').onclick=async()=>{
+  if(!saveDiagnosticReport || state.busy) return;
+  const report=saveDiagnosticReport;
+  $('inspectSaveDebug').disabled=true;
+  $('debugCopyStatus').textContent='Reading ERP records for comparison…';
+  try {
+    report.inspection=await api.inspectCreation(report.request.payload);
+    if(saveDiagnosticReport===report) {
+      $('saveDebugText').value=diagnosticJSON(report);
+      $('debugCopyStatus').textContent='Inspection complete. Copy the updated debug report. No records were changed.';
+    }
+  } catch(e) { $('debugCopyStatus').textContent=`Inspection failed: ${e.message}`; }
+  finally { $('inspectSaveDebug').disabled=false; }
+};
 $('copySaveDebug').onclick=async()=>{
   const text=$('saveDebugText').value;
   try { await navigator.clipboard.writeText(text); $('debugCopyStatus').textContent='Debug report copied.'; }

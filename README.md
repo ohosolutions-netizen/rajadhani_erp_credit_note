@@ -76,3 +76,9 @@ Bill type is configured with document custom-field API name `cf_bill_type`. The 
 A failed save expands a copyable debug report below the error in the review dialog. It contains the exact approved POST payload, ERP code and complete response body/SDK envelope, selected Godown, source invoice lines, packing and custom-field mappings. Authentication keys are redacted. Reports stay in page memory; copying does not transmit them. If Zoho supplies only a generic error, the report preserves that limitation rather than inventing a field-level cause.
 
 The tenant-confirmed numeric IDs are now used in REST creation payloads: Bill type `4160832000001021023`, Bill No `4160832000001016028`, Ref Bill Date `4160832000001015010`. API names remain in configuration for reference; numeric IDs take precedence. Live creation must be retried in Zoho to confirm whether this resolves error code 6.
+
+## Code 6 investigation — diagnostic version 2
+
+Numeric IDs did not resolve the tenant's generic creation error, so they are not confirmed as its cause. Single-invoice returns now pass the documented `invoice_id` query parameter as well as line references, with `ignore_auto_number_generation=false`. Mixed-invoice returns retain their separate line references and do not send a misleading document-wide invoice ID. The complete query is now included in diagnostics.
+
+After a failed save, **Inspect ERP records (read only)** collects the customer, up to five unique source invoices/items, and one existing Credit Note for the same customer (if found in the first ten). It reports lookup permission failures too; existing Credit Note access requires `ERP.creditnotes.READ`. Copy the updated report for comparison of field types, GST data, item/account/stock details and a known stored Credit Note structure. This does not retry creation or modify any records. The code 6 cause and live success remain unverified.
