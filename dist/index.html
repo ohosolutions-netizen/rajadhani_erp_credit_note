@@ -517,7 +517,7 @@ class ERP {
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const config = {"apiBase":"https://www.zohoapis.in/erp/v3","connectionLinkName":"erp_admin","organizationId":"","customFields":{"billType":{"label":"Bill type","id":"","required":true},"billCreatedBy":{"label":"Bill created by","id":"","required":false},"whatsapp":{"label":"WhatsApp number","id":"","required":false},"mobile":{"label":"Mobile number","id":"","required":false},"shippingPhone":{"label":"Shipping phone","id":"","required":false}},"itemFields":{"mu":"","ratio":""},"lookupSources":{},"requireSalesperson":true,"requireLocation":true,"invoiceQuantityMode":"pieces","organizationStateCode":"KL","lineCustomFields":{"billNo":{"label":"BillNO","id":"","apiName":""},"billDate":{"label":"Ref_Bill Date","id":"","apiName":""}}};
+const config = {"apiBase":"https://www.zohoapis.in/erp/v3","connectionLinkName":"erp_admin","organizationId":"","customFields":{"billType":{"label":"Bill type","id":"","required":true},"billCreatedBy":{"label":"Bill created by","id":"","required":false},"whatsapp":{"label":"WhatsApp number","id":"","required":false},"mobile":{"label":"Mobile number","id":"","required":false},"shippingPhone":{"label":"Shipping phone","id":"","required":false}},"itemFields":{"mu":"","ratio":""},"lookupSources":{},"requireSalesperson":true,"requireLocation":true,"invoiceQuantityMode":"pieces","organizationStateCode":"KL","lineCustomFields":{"billNo":{"label":"BillNO","id":"","apiName":"cf_billno"},"billDate":{"label":"Ref_Bill Date","id":"","apiName":"cf_ref_bill_date"}},"defaultGodownName":"Rajadhani"};
 if (window.RAJADHANI_PREVIEW_CONFIG) Object.assign(config, window.RAJADHANI_PREVIEW_CONFIG);
 const api = new ERP(config, window.ZFAPPS);
 const state = { customer: null, warehouses: [], lines: [], taxes: [], currency: 'INR', busy: false, saved: false, allowClose: false, uncertain: false, customerVersion: 0, pendingOperations: 0, pendingSO: { item: null, rows: [], loading: false, error: '' } };
@@ -883,6 +883,11 @@ async function loadLookups() {
       try {
         state.warehouses=(await api.all('/locations','locations')).filter(w=>w.status!=='inactive' && w.is_active!==false && w.location_id);
         selectOptions('location',state.warehouses,'location_id','location_name','Select Godown');
+        if (!$('location').value) {
+          const defaultName=String(config.defaultGodownName || '').trim().toLocaleLowerCase();
+          const matches=state.warehouses.filter(w=>String(w.location_name || '').trim().toLocaleLowerCase()===defaultName);
+          if(defaultName && matches.length===1) $('location').value=String(matches[0].location_id);
+        }
         $('location').disabled=!state.warehouses.length;
         $('godownStatus').textContent=state.warehouses.length ? '' : 'No active warehouses/locations available.';
       } catch(e) { $('godownStatus').textContent='Could not load warehouses. Reconnect to retry.'; throw e; }

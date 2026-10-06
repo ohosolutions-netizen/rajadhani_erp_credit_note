@@ -42,12 +42,13 @@
     "billNo": {
       "label": "BillNO",
       "id": "",
-      "apiName": ""
+      "apiName": "cf_billno"
     },
     "billDate": {
       "label": "Ref_Bill Date",
       "id": "",
-      "apiName": ""
+      "apiName": "cf_ref_bill_date"
     }
-  }
+  },
+  "defaultGodownName": "Rajadhani"
 }

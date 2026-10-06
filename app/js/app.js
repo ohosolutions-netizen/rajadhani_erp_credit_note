@@ -368,6 +368,11 @@ async function loadLookups() {
       try {
         state.warehouses=(await api.all('/locations','locations')).filter(w=>w.status!=='inactive' && w.is_active!==false && w.location_id);
         selectOptions('location',state.warehouses,'location_id','location_name','Select Godown');
+        if (!$('location').value) {
+          const defaultName=String(config.defaultGodownName || '').trim().toLocaleLowerCase();
+          const matches=state.warehouses.filter(w=>String(w.location_name || '').trim().toLocaleLowerCase()===defaultName);
+          if(defaultName && matches.length===1) $('location').value=String(matches[0].location_id);
+        }
         $('location').disabled=!state.warehouses.length;
         $('godownStatus').textContent=state.warehouses.length ? '' : 'No active warehouses/locations available.';
       } catch(e) { $('godownStatus').textContent='Could not load warehouses. Reconnect to retry.'; throw e; }
