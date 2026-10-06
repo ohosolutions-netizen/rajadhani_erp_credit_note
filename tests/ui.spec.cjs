@@ -45,5 +45,5 @@ test('bill lookup failure is visible and retry works',async({page})=>{
  await page.locator('[data-bill]').click();await expect(page.locator('#billStatus')).toContainText('Could not load transactions');await page.getByRole('button',{name:'Close bills'}).click();await bill(page);await expect(page.locator('[data-bill]')).toHaveText('INV-00124');
 });
 test('popup remains bounded and bill table scrolls',async({page})=>{
- await page.setViewportSize({width:1100,height:700});await start(page);await page.locator('[data-bill]').click();await expect(page.locator('#billRows tr')).toHaveCount(4);const box=await page.locator('#billDialog').boundingBox();expect(box.width).toBeLessThanOrEqual(1100);expect(box.height).toBeLessThanOrEqual(700);await page.screenshot({path:'dist/CreditNotePreview.png'});
+ await page.setViewportSize({width:1100,height:700});await start(page);await page.locator('[data-bill]').click();await expect(page.locator('#billRows tr')).toHaveCount(4);const box=await page.locator('#billDialog').boundingBox();expect(box.width).toBeLessThanOrEqual(1100);expect(box.height).toBeLessThanOrEqual(700);await page.screenshot({path:'dist/CreditNotePreview.png'});await page.getByRole('button',{name:'Close bills'}).click();await page.locator('#invoiceItemsCard').screenshot({path:'dist/CreditNoteItems.png'});
 });
