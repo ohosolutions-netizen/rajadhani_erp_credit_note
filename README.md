@@ -68,3 +68,5 @@ Set `lineCustomFields.billNo.id` / `.apiName` and `lineCustomFields.billDate.id`
 Godown defaults to the unique active location named **Rajadhani** (case-insensitive exact name match). Users can choose another Godown. If the default is absent or ambiguous, selection stays blank and must be made explicitly.
 
 Bill created by, Mobile number and Shipping phone are omitted from the form and document custom-field payload. They are not required for saving. The bill-line API mappings remain `cf_billno` and `cf_ref_bill_date`.
+
+Bill type is configured with document custom-field API name `cf_bill_type`. The widget uses a dark green theme with white section/table headings.

@@ -1,7 +1,7 @@
 // Preview fixtures only. This file is never included in the ERP widget ZIP.
 (() => {
 const fields = {
- billType:{label:'Bill type',id:'demo-bill',required:true},billCreatedBy:{label:'Bill created by',id:'demo-user',required:true},transport:{label:'Transport',id:'demo-transport',required:true},agent:{label:'Agent name',id:'demo-agent'},vehicle:{label:'Vehicle number',id:'demo-vehicle'},whatsapp:{label:'WhatsApp number',id:'demo-whatsapp'},mobile:{label:'Mobile number',id:'demo-mobile',required:true},shippingPhone:{label:'Shipping phone',id:'demo-shipphone'}
+ billType:{label:'Bill type',apiName:'cf_bill_type',required:true},billCreatedBy:{label:'Bill created by',id:'demo-user',required:true},transport:{label:'Transport',id:'demo-transport',required:true},agent:{label:'Agent name',id:'demo-agent'},vehicle:{label:'Vehicle number',id:'demo-vehicle'},whatsapp:{label:'WhatsApp number',id:'demo-whatsapp'},mobile:{label:'Mobile number',id:'demo-mobile',required:true},shippingPhone:{label:'Shipping phone',id:'demo-shipphone'}
 };
 for (const key of ['transport','agent','vehicle','billCreatedBy','mobile','shippingPhone']) delete fields[key];
 const lookups = {

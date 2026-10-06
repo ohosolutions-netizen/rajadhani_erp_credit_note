@@ -6,7 +6,8 @@
     "billType": {
       "label": "Bill type",
       "id": "",
-      "required": true
+      "required": true,
+      "apiName": "cf_bill_type"
     },
     "whatsapp": {
       "label": "WhatsApp number",
