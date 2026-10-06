@@ -208,7 +208,7 @@ aside{min-width:0;overflow:visible;align-self:stretch}
 <div id="notice" class="notice" role="status" hidden><span id="noticeText"></span><button type="button" id="noticeClose" class="noticeclose" aria-label="Close warning">×</button></div>
 <form id="invoiceForm"><div class="workspace"><div class="maincolumn">
 <section class="card"><div class="sectionheading"><div><span class="step">01</span><h2>Customer & credit note</h2></div><span class="subtle">Sales return entry</span></div><div class="cardbody"><div class="grid customergrid"><div class="field searchfield"><label for="customerSearch">Customer <em>*</em></label><div class="searchbox"><span>⌕</span><input id="customerSearch" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="customerResults" placeholder="Search customers by name…" required><kbd>⌘ K</kbd></div><div id="customerResults" class="results" role="listbox" hidden></div><small id="customerHint">Search your ERP customer directory</small></div><div class="field"><label for="invoiceDate">Credit Note date <em>*</em></label><input id="invoiceDate" type="date" required></div><div class="field"><label for="invoiceNumber">Credit Note number</label><input id="invoiceNumber" readonly placeholder="Assigned by ERP" class="mutedinput"></div></div>
-<div class="grid fourfields"><div class="field"><label>Original bills</label><span>Select a bill on each item row</span><select id="salesOrder" hidden disabled></select></div><div class="field"><label for="gstNumber">Customer GSTIN</label><input id="gstNumber" readonly placeholder="From customer" class="mutedinput"></div><div class="field"><label for="placeOfSupply">Place of supply <em>*</em></label><input id="placeOfSupply" maxlength="2" placeholder="State code, e.g. KL" required></div><div class="field"><label for="salesperson">Salesperson <em>*</em></label><select id="salesperson"><option value="">Select salesperson</option></select></div></div>
+<div class="grid fourfields"><div class="field"><label for="invoiceType">Invoice Type</label><input id="invoiceType" readonly placeholder="From customer GSTIN" class="mutedinput"><select id="salesOrder" hidden disabled></select></div><div class="field"><label for="gstNumber">Customer GSTIN</label><input id="gstNumber" readonly placeholder="From customer" class="mutedinput"></div><div class="field"><label for="placeOfSupply">Place of supply <em>*</em></label><input id="placeOfSupply" maxlength="2" placeholder="State code, e.g. KL" required></div><div class="field"><label for="salesperson">Salesperson <em>*</em></label><select id="salesperson"><option value="">Select salesperson</option></select></div></div>
 
 <div class="addressgrid"><div class="addresscard"><div class="addressheading"><h3>Billing address</h3><span class="tinybadge">ERP RECORD</span></div><p id="billingAddress" class="address">Select a customer to load their billing address.</p></div><div class="addresscard"><div class="addressheading"><h3>Shipping address</h3><label class="check"><input type="checkbox" id="sameAsBilling"> Same as billing</label></div><textarea id="shippingAddress" class="address editaddress" rows="3" placeholder="Tick Same as billing to copy billing address, or enter shipping address manually."></textarea><div class="field compact"><label for="shippingGst">Shipping GSTIN</label><input id="shippingGst" maxlength="15" placeholder="15-character GSTIN"></div></div></div>
 <details class="more" open><summary>Contact & billing details <span>Required business fields</span></summary><div class="grid three" id="billingFields"></div></details></div></section>
@@ -358,11 +358,17 @@ function validateCreditNote(state, values, config) {
   }
   return [...new Set(errors)];
 }
+function customerInvoiceType(customer) {
+  return String(customer?.gst_no ?? '').trim()
+    ? { value: 'registered', label: 'Registered' }
+    : { value: 'b2cs', label: 'B2C others' };
+}
 function makePayload(state, values, config) {
   const intraState = values.place_of_supply === (config.organizationStateCode || 'KL');
   const totals = calculate(state.lines, values.rounded, intraState);
   const payload = {
     is_draft: true,
+    reference_invoice_type: customerInvoiceType(state.customer).value,
     customer_id: String(state.customer.contact_id), date: values.date,
     place_of_supply: values.place_of_supply,
     line_items: state.lines.filter(l => !l.notFound).map((l, index) => {
@@ -759,7 +765,7 @@ async function chooseCustomer(record) {
     if(c.currency_code && api.organization?.currency_code && c.currency_code!==api.organization.currency_code)throw new Error('This customer uses another currency. Use the native ERP editor to apply exchange rates and price lists.');
     state.customer=c;state.currency=c.currency_code || api.organization?.currency_code || 'INR';$('currencyLabel').textContent=state.currency;
     $('customerSearch').value=c.contact_name; $('customerHint').textContent=[c.company_name,c.email].filter(Boolean).join(' · ') || 'Customer loaded from ERP';
-    $('gstNumber').value=c.gst_no || ''; $('shippingGst').value=c.shipping_gst_no || '';
+    $('gstNumber').value=c.gst_no || ''; $('invoiceType').value=customerInvoiceType(c).label; $('shippingGst').value=c.shipping_gst_no || '';
     $('placeOfSupply').value=c.place_of_contact || c.place_of_supply || '';
     for(const [k,m] of Object.entries(config.customFields)) { const source=(c.custom_fields||[]).find(f=>m.customerApiName && f.api_name===m.customerApiName); if(source && $(`cf_${k}`))$(`cf_${k}`).value=source.value ?? ''; }
     addresses();applySupplyTaxes();
@@ -797,7 +803,7 @@ function searchable(inputId, resultsId, search, key, describe, choose, options =
   return run;
 }
 searchable('customerSearch','customerResults',(q,p)=>api.searchCustomers(q,p),'contacts',c=>[c.contact_name,[c.company_name,c.mobile || c.email].filter(Boolean).join(' · ')],chooseCustomer);
-$('customerSearch').addEventListener('input',()=>{state.customerVersion++;state.customer=null;state.lines=[];renderLines();$('gstNumber').value='';$('shippingGst').value='';$('placeOfSupply').value='';Object.keys(config.customFields).filter(k=>/phone|mobile|whatsapp/i.test(k)).forEach(k=>{if($(`cf_${k}`))$(`cf_${k}`).value='';});$('customerHint').textContent='Choose a matching ERP customer';addresses();});
+$('customerSearch').addEventListener('input',()=>{state.customerVersion++;state.customer=null;state.lines=[];renderLines();$('gstNumber').value='';$('invoiceType').value='';$('shippingGst').value='';$('placeOfSupply').value='';Object.keys(config.customFields).filter(k=>/phone|mobile|whatsapp/i.test(k)).forEach(k=>{if($(`cf_${k}`))$(`cf_${k}`).value='';});$('customerHint').textContent='Choose a matching ERP customer';addresses();});
 function normalizeTax(t){return {id:String(t.tax_id || t.tax_group_id || t.id || ''),name:t.tax_name || t.tax_group_name || t.name || t.tax_name_formatted || t.text,percentage:Number(t.tax_percentage ?? t.tax_group_percentage ?? t.percentage ?? 0)};}
 function isIntraState() {
   const supply = $('placeOfSupply').value.trim().toUpperCase();

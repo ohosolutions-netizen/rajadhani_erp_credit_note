@@ -138,11 +138,17 @@ export function validateCreditNote(state, values, config) {
   }
   return [...new Set(errors)];
 }
+export function customerInvoiceType(customer) {
+  return String(customer?.gst_no ?? '').trim()
+    ? { value: 'registered', label: 'Registered' }
+    : { value: 'b2cs', label: 'B2C others' };
+}
 export function makePayload(state, values, config) {
   const intraState = values.place_of_supply === (config.organizationStateCode || 'KL');
   const totals = calculate(state.lines, values.rounded, intraState);
   const payload = {
     is_draft: true,
+    reference_invoice_type: customerInvoiceType(state.customer).value,
     customer_id: String(state.customer.contact_id), date: values.date,
     place_of_supply: values.place_of_supply,
     line_items: state.lines.filter(l => !l.notFound).map((l, index) => {

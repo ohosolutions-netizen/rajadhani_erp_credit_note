@@ -1,5 +1,5 @@
 import { ERP } from './erp.js';
-import { calculate, validateCreditNote, makePayload, pieceQuantity, itemPacking, lineAmounts, taxPreference, hasValidDiscount, creditNoteDetailUrl, diagnosticJSON } from './core.js';
+import { calculate, validateCreditNote, makePayload, customerInvoiceType, pieceQuantity, itemPacking, lineAmounts, taxPreference, hasValidDiscount, creditNoteDetailUrl, diagnosticJSON } from './core.js';
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const config = await fetch(new URL('../config.json', import.meta.url)).then(r => { if (!r.ok) throw new Error('Cannot load widget configuration'); return r.json(); });
@@ -197,7 +197,7 @@ async function chooseCustomer(record) {
     if(c.currency_code && api.organization?.currency_code && c.currency_code!==api.organization.currency_code)throw new Error('This customer uses another currency. Use the native ERP editor to apply exchange rates and price lists.');
     state.customer=c;state.currency=c.currency_code || api.organization?.currency_code || 'INR';$('currencyLabel').textContent=state.currency;
     $('customerSearch').value=c.contact_name; $('customerHint').textContent=[c.company_name,c.email].filter(Boolean).join(' · ') || 'Customer loaded from ERP';
-    $('gstNumber').value=c.gst_no || ''; $('shippingGst').value=c.shipping_gst_no || '';
+    $('gstNumber').value=c.gst_no || ''; $('invoiceType').value=customerInvoiceType(c).label; $('shippingGst').value=c.shipping_gst_no || '';
     $('placeOfSupply').value=c.place_of_contact || c.place_of_supply || '';
     for(const [k,m] of Object.entries(config.customFields)) { const source=(c.custom_fields||[]).find(f=>m.customerApiName && f.api_name===m.customerApiName); if(source && $(`cf_${k}`))$(`cf_${k}`).value=source.value ?? ''; }
     addresses();applySupplyTaxes();
@@ -235,7 +235,7 @@ function searchable(inputId, resultsId, search, key, describe, choose, options =
   return run;
 }
 searchable('customerSearch','customerResults',(q,p)=>api.searchCustomers(q,p),'contacts',c=>[c.contact_name,[c.company_name,c.mobile || c.email].filter(Boolean).join(' · ')],chooseCustomer);
-$('customerSearch').addEventListener('input',()=>{state.customerVersion++;state.customer=null;state.lines=[];renderLines();$('gstNumber').value='';$('shippingGst').value='';$('placeOfSupply').value='';Object.keys(config.customFields).filter(k=>/phone|mobile|whatsapp/i.test(k)).forEach(k=>{if($(`cf_${k}`))$(`cf_${k}`).value='';});$('customerHint').textContent='Choose a matching ERP customer';addresses();});
+$('customerSearch').addEventListener('input',()=>{state.customerVersion++;state.customer=null;state.lines=[];renderLines();$('gstNumber').value='';$('invoiceType').value='';$('shippingGst').value='';$('placeOfSupply').value='';Object.keys(config.customFields).filter(k=>/phone|mobile|whatsapp/i.test(k)).forEach(k=>{if($(`cf_${k}`))$(`cf_${k}`).value='';});$('customerHint').textContent='Choose a matching ERP customer';addresses();});
 function normalizeTax(t){return {id:String(t.tax_id || t.tax_group_id || t.id || ''),name:t.tax_name || t.tax_group_name || t.name || t.tax_name_formatted || t.text,percentage:Number(t.tax_percentage ?? t.tax_group_percentage ?? t.percentage ?? 0)};}
 function isIntraState() {
   const supply = $('placeOfSupply').value.trim().toUpperCase();

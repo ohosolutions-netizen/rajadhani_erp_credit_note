@@ -52,3 +52,17 @@ test('inspection only reads bounded source records and records permission failur
  const inspection=await api.inspectCreation({customer_id:'c1',line_items:[{invoice_id:'inv1',item_id:'it1'},{invoice_id:'inv1',item_id:'it1'}]});
  assert.equal(inspection.readOnly,true);assert.equal(calls.length,4);assert.ok(calls.every(c=>c.method===undefined));assert.match(inspection.checks.at(-1).error,/READ scope/);
 });
+
+
+test('Invoice Type follows customer GSTIN and never the shipping GSTIN or Bill type',()=>{
+ const values={date:'2026-10-06',place_of_supply:'KL',custom:{billType:'Cash'},shipping_gst_no:'32SHIPPING1234Z5'};
+ const config={customFields:{billType:{id:'bill-type'}}};
+ for(const gst of ['32ABCDE1234F1Z5',' 32ABCDE1234F1Z5 ', '', '   ', null, undefined]) {
+  const customer={contact_id:'customer',gst_no:gst};
+  const payload=core.makePayload({customer,lines:[]},values,config);
+  const registered=Boolean(gst?.trim());
+  assert.equal(payload.reference_invoice_type,registered?'registered':'b2cs');
+  assert.equal(core.customerInvoiceType(customer).label,registered?'Registered':'B2C others');
+  assert.deepEqual(payload.custom_fields,[{customfield_id:'bill-type',value:'Cash'}]);
+ }
+});
