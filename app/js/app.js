@@ -5,7 +5,7 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;',
 const config = await fetch(new URL('../config.json', import.meta.url)).then(r => { if (!r.ok) throw new Error('Cannot load widget configuration'); return r.json(); });
 if (window.RAJADHANI_PREVIEW_CONFIG) Object.assign(config, window.RAJADHANI_PREVIEW_CONFIG);
 const api = new ERP(config, window.ZFAPPS);
-const state = { customer: null, lines: [], taxes: [], currency: 'INR', busy: false, saved: false, allowClose: false, uncertain: false, customerVersion: 0, pendingOperations: 0, pendingSO: { item: null, rows: [], loading: false, error: '' } };
+const state = { customer: null, warehouses: [], lines: [], taxes: [], currency: 'INR', busy: false, saved: false, allowClose: false, uncertain: false, customerVersion: 0, pendingOperations: 0, pendingSO: { item: null, rows: [], loading: false, error: '' } };
 let approvedPayload = null;
 function pending(delta) { state.pendingOperations += delta; $('saveButton').disabled = state.pendingOperations > 0 || state.saved || state.uncertain; }
 const money = n => new Intl.NumberFormat('en-IN', { style: 'currency', currency: state.currency }).format(Number.isFinite(n) ? n : 0);
@@ -37,10 +37,11 @@ function fieldMarkup(key) {
   return `<div class="field"><label for="cf_${key}">${esc(f.label)} ${f.required && f.id ? '<em>*</em>' : ''}</label>${input}${!f.id ? '<small class="mappinghint">Not sent to ERP yet</small>' : ''}</div>`;
 }
 $('billingFields').innerHTML = ['billType','billCreatedBy','mobile','whatsapp','shippingPhone'].map(fieldMarkup).join('');
-$('dispatchFields').innerHTML = ['transport','agent','vehicle'].map(fieldMarkup).join('');
+
 $('invoiceDate').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,10);
+function selectedGodown() { return state.warehouses.find(w=>String(w.location_id)===$('location').value); }
 function getValues() {
-  return { date: $('invoiceDate').value, place_of_supply: $('placeOfSupply').value.trim().toUpperCase(), salesperson_id: $('salesperson').value, location_id: $('location').value,
+  return { date: $('invoiceDate').value, place_of_supply: $('placeOfSupply').value.trim().toUpperCase(), salesperson_id: $('salesperson').value, location_id: selectedGodown()?.type === 'line_item_only' ? (selectedGodown()?.parent_location_id || '') : $('location').value, godown_id: $('location').value,
     shipping_gst_no: $('shippingGst').value.trim(), shipping_address: $('shippingAddress').value.trim(), notes: $('notes').value.trim(), sameAsBilling: $('sameAsBilling').checked,
     rounded: true,
     custom: Object.fromEntries(Object.keys(config.customFields).map(k => [k, $(`cf_${k}`)?.value?.trim?.() ?? ''])) };
@@ -362,7 +363,15 @@ async function loadLookups() {
     {name:'items',run:()=>api.searchItems('',1)},
     {name:'taxes',run:async()=>{state.taxes=(await api.all('/settings/taxes','taxes')).filter(t=>t.is_active!==false).map(normalizeTax);renderLines();}},
     {name:'salespersons',run:async()=>{const source=config.lookupSources.salesperson;if(source)selectOptions('salesperson',await api.all(source.path,source.key,source.query),source.idKey,source.labelKey,'Select salesperson');else selectOptions('salesperson',await api.salespersons(),'salesperson_id','salesperson_name','Select salesperson');}},
-    {name:'locations',run:async()=>{selectOptions('location',await api.all('/locations','locations'),'location_id','location_name','Organization default');}},
+    {name:'Godowns',run:async()=>{
+      $('location').disabled=true;
+      try {
+        state.warehouses=(await api.all('/locations','locations')).filter(w=>w.status!=='inactive' && w.is_active!==false && w.location_id);
+        selectOptions('location',state.warehouses,'location_id','location_name','Select Godown');
+        $('location').disabled=!state.warehouses.length;
+        $('godownStatus').textContent=state.warehouses.length ? '' : 'No active warehouses/locations available.';
+      } catch(e) { $('godownStatus').textContent='Could not load warehouses. Reconnect to retry.'; throw e; }
+    }},
     ...Object.entries(config.lookupSources).filter(([key])=>key!=='salesperson'&&key!=='billType').map(([key,source])=>({name:config.customFields[key]?.label||key,run:async()=>{if(!$(`cf_${key}`))return;selectOptions(`cf_${key}`,await api.all(source.path,source.key,source.query),source.idKey,source.labelKey,`Select ${config.customFields[key].label.toLowerCase()}`);}}))
   ];
   const results=await Promise.allSettled(jobs.map(j=>j.run()));const failures=results.flatMap((r,i)=>r.status==='rejected'?[`${jobs[i].name}: ${r.reason.message}`]:[]);
@@ -387,7 +396,7 @@ $('invoiceForm').addEventListener('submit',e=>{
   if(state.pendingOperations){notice('Wait for ERP records to finish loading before reviewing.');return;}
   const v=getValues(),errors=validateCreditNote(state,v,config);if(errors.length){notice(errors.join(' '),'error');const index=state.lines.findIndex(l=>!l.notFound&&!hasValidDiscount(l));if(index>=0)focusDiscount(index,true);else if(v.shipping_gst_no && v.shipping_gst_no.length!==15)$('shippingGst').focus();return;}
   try { approvedPayload=makePayload(state,v,config); } catch(e) { error(e); return; }const t=calculate(state.lines,v.rounded,v.place_of_supply === (config.organizationStateCode || 'KL'));
-  $('reviewContent').innerHTML=`<div class="summaryrow"><span>Customer</span><strong>${esc(state.customer.contact_name)}</strong></div><div class="summaryrow"><span>Credit Note date</span><strong>${esc(v.date)}</strong></div>${state.lines.map(l=>`<div class="summaryrow"><span>${esc(l.name)} · Bill ${esc(l.sourceBill?.number)} (${esc(l.sourceBill?.date)}) · ${l.quantity} × ${l.pieces ?? "?"} = ${l.pieces ? pieceQuantity(l) : "?"} pieces · ${l.discount ?? 0}% discount (${esc(money(lineAmounts(l).discount))})</span><strong>${esc(money(lineAmounts(l).taxable))}</strong></div>`).join('')}<div class="summaryrow"><span>Total Discount Amount</span><strong>${esc(money(t.discount))}</strong></div><div class="grandtotal"><span>Estimated credit note total</span><strong>${esc(money(t.total))}</strong></div><p>This creates a draft credit note. It does not email the customer. ERP will calculate the final total.</p>`;
+  $('reviewContent').innerHTML=`<div class="summaryrow"><span>Customer</span><strong>${esc(state.customer.contact_name)}</strong></div><div class="summaryrow"><span>Credit Note date</span><strong>${esc(v.date)}</strong></div><div class="summaryrow"><span>Godown</span><strong>${esc(selectedGodown()?.location_name || '')}</strong></div>${state.lines.map(l=>`<div class="summaryrow"><span>${esc(l.name)} · Bill ${esc(l.sourceBill?.number)} (${esc(l.sourceBill?.date)}) · ${l.quantity} × ${l.pieces ?? "?"} = ${l.pieces ? pieceQuantity(l) : "?"} pieces · ${l.discount ?? 0}% discount (${esc(money(lineAmounts(l).discount))})</span><strong>${esc(money(lineAmounts(l).taxable))}</strong></div>`).join('')}<div class="summaryrow"><span>Total Discount Amount</span><strong>${esc(money(t.discount))}</strong></div><div class="grandtotal"><span>Estimated credit note total</span><strong>${esc(money(t.total))}</strong></div><p>This creates a draft credit note. It does not email the customer. ERP will calculate the final total.</p>`;
   $('saveStatus').textContent='';$('confirmSave').disabled=!!window.RAJADHANI_PREVIEW_CONFIG;if(window.RAJADHANI_PREVIEW_CONFIG)$('saveStatus').textContent='Preview only. No records will be created.';$('reviewDialog').showModal();
 });
 $('confirmSave').onclick=async()=>{

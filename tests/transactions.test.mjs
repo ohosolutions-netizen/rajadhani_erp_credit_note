@@ -25,3 +25,18 @@ test('references and aggregate quantities validated; payload uses draft and orig
  assert.ok(core.validateCreditNote({...state,customer:{contact_id:'other'}},values,config).some(e=>e.includes('different customer')));
  const payload=core.makePayload(state,values,config);assert.equal(payload.is_draft,true);assert.equal(payload.line_items[0].invoice_id,'i1');assert.equal(payload.line_items[0].invoice_item_id,'l1');
 });
+
+test('selected Godown overrides source location and line fields preserve bill number/date',()=>{
+ const line={item_id:'item1',quantity:1,pieces:2,rate:100,discount:0,tax:{id:'t',percentage:5},sourceBill:{invoiceId:'inv1',lineId:'il1',customerId:'c1',quantity:10,number:'INV-001',date:'2026-09-01',locationId:'old-warehouse'}};
+ const state={customer:{contact_id:'c1'},lines:[line]};
+ const values={date:'2026-10-06',place_of_supply:'KL',custom:{},godown_id:'new-warehouse',location_id:'parent-branch',notes:'Returned damaged'};
+ const config={invoiceQuantityMode:'pieces',customFields:{},requireLocation:true,lineCustomFields:{billNo:{label:'BillNO',id:'123'},billDate:{label:'Ref_Bill Date',apiName:'cf_ref_bill_date'}}};
+ assert.deepEqual(core.validateCreditNote(state,values,config),[]);
+ const payload=core.makePayload(state,values,config);
+ assert.equal(payload.location_id,'parent-branch');assert.equal(payload.line_items[0].location_id,'new-warehouse');assert.equal(payload.notes,'Returned damaged');
+ assert.deepEqual(payload.line_items[0].item_custom_fields,[{customfield_id:'123',value:'INV-001'},{api_name:'cf_ref_bill_date',value:'2026-09-01'}]);
+ assert.ok(core.validateCreditNote(state,{...values,godown_id:''},config).includes('Select a Godown.'));
+ const missing={...config,lineCustomFields:{billNo:{label:'BillNO',id:''}}};
+ assert.ok(core.validateCreditNote(state,values,missing).some(e=>e.includes('BillNO')));
+ assert.throws(()=>core.makePayload(state,values,missing),/BillNO/);
+});

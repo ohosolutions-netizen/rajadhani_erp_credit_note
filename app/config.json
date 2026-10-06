@@ -13,21 +13,6 @@
       "id": "",
       "required": false
     },
-    "transport": {
-      "label": "Transport",
-      "id": "",
-      "required": false
-    },
-    "agent": {
-      "label": "Agent name",
-      "id": "",
-      "required": false
-    },
-    "vehicle": {
-      "label": "Vehicle number",
-      "id": "",
-      "required": false
-    },
     "whatsapp": {
       "label": "WhatsApp number",
       "id": "",
@@ -50,7 +35,19 @@
   },
   "lookupSources": {},
   "requireSalesperson": true,
-  "requireLocation": false,
+  "requireLocation": true,
   "invoiceQuantityMode": "pieces",
-  "organizationStateCode": "KL"
+  "organizationStateCode": "KL",
+  "lineCustomFields": {
+    "billNo": {
+      "label": "BillNO",
+      "id": "",
+      "apiName": ""
+    },
+    "billDate": {
+      "label": "Ref_Bill Date",
+      "id": "",
+      "apiName": ""
+    }
+  }
 }

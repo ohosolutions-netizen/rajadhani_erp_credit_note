@@ -57,4 +57,10 @@ This repository is a fresh Credit Note source history. The copied Invoice/Edit I
 
 ## Compact green item grid
 
-The item grid contains only Item Code, Bill No, Ref Bill No, Ref Bill Date, Pieces / pack, Order Qty, Rate, Disc %, Tax and Amount. All ten columns fit the panel without horizontal scrolling. Smaller ERP windows place the summary below the form to give the grid the full width. Item names are available on hover over the item code. Amount remains the discounted amount before tax; quantity and per-piece rate calculations are unchanged.
+The item grid contains only Item Code, Bill No, Ref Bill No, Ref Bill Date, Pieces / pack, Order Qty, Rate, Disc %, Tax and Amount. All ten columns fit the panel without horizontal scrolling. The compact grid retains the summary on the right. Item names are available on hover over the item code. Amount remains the discounted amount before tax; quantity and per-piece rate calculations are unchanged.
+
+## Godown and Credit Note line custom fields
+
+Godown is required and lists all active ERP locations from every page of `/locations` (ERP manages branches/warehouses as locations). The selected ID is sent in each `line_items[].location_id`, replacing the source invoice location. For a `line_item_only` location, its parent is sent as the document location; a general location is used at both levels. Inactive locations are excluded. Failed/empty lookups do not silently choose a warehouse. Remarks is sent as `notes`. Transport, Agent and Vehicle are removed from the form/configuration.
+
+Set `lineCustomFields.billNo.id` / `.apiName` and `lineCustomFields.billDate.id` / `.apiName` to the actual Credit Note subform identifiers. Labels are `BillNO` and `Ref_Bill Date`; identifiers are pending tenant confirmation. Each row sends `item_custom_fields` with the selected invoice number and invoice date (`YYYY-MM-DD`). A custom-field ID takes precedence over an API name. Saving is blocked while either mapping is missing; no guessed identifiers are submitted. These are line custom fields, separate from document `custom_fields`.

@@ -173,3 +173,24 @@ dialog{border-radius:7px}
  .maincolumn{display:flex;overflow:visible;min-width:0}
  .summary .cardbody{overflow:visible}
 }
+/* Compact desktop workspace with a persistent right summary pane. */
+main{height:auto;min-height:100vh;overflow:visible}
+form,.workspace{height:auto}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:8px;overflow:visible;align-items:start}
+.maincolumn{display:flex;min-width:0;overflow:visible}
+aside{min-width:0;overflow:visible;align-self:stretch}
+.summary{height:auto;position:sticky;top:6px}
+.summary .cardbody{display:flex;flex-direction:column;gap:9px;overflow:visible;padding:9px}
+#invoiceItemsCard th,#invoiceItemsCard td{padding:5px 3px;font-size:9px}
+#invoiceItemsCard td input,#invoiceItemsCard td select{font-size:10px;padding:2px;height:25px;min-height:25px}
+#invoiceItemsCard .billbutton{font-size:9px;padding:2px;min-height:25px}
+#invoiceItemsCard th:nth-child(1),#invoiceItemsCard td:nth-child(1){width:14%}
+#invoiceItemsCard th:nth-child(2),#invoiceItemsCard td:nth-child(2){width:9%}
+#invoiceItemsCard th:nth-child(3),#invoiceItemsCard td:nth-child(3){width:11%}
+#invoiceItemsCard th:nth-child(4),#invoiceItemsCard td:nth-child(4){width:12%}
+#invoiceItemsCard th:nth-child(5),#invoiceItemsCard td:nth-child(5){width:11%}
+#invoiceItemsCard th:nth-child(6),#invoiceItemsCard td:nth-child(6){width:8%}
+#invoiceItemsCard th:nth-child(7),#invoiceItemsCard td:nth-child(7){width:9%}
+#invoiceItemsCard th:nth-child(8),#invoiceItemsCard td:nth-child(8){width:7%}
+#invoiceItemsCard th:nth-child(9),#invoiceItemsCard td:nth-child(9){width:6%}
+#invoiceItemsCard th:nth-child(10),#invoiceItemsCard td:nth-child(10){width:13%}

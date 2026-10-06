@@ -3,11 +3,12 @@
 const fields = {
  billType:{label:'Bill type',id:'demo-bill',required:true},billCreatedBy:{label:'Bill created by',id:'demo-user',required:true},transport:{label:'Transport',id:'demo-transport',required:true},agent:{label:'Agent name',id:'demo-agent'},vehicle:{label:'Vehicle number',id:'demo-vehicle'},whatsapp:{label:'WhatsApp number',id:'demo-whatsapp'},mobile:{label:'Mobile number',id:'demo-mobile',required:true},shippingPhone:{label:'Shipping phone',id:'demo-shipphone'}
 };
+for (const key of ['transport','agent','vehicle']) delete fields[key];
 const lookups = {
  billType:[{id:'Cash',name:'Cash'},{id:'Credit',name:'Credit'},{id:'Credit-Account',name:'Credit-Account'}],transport:[{id:'Own delivery',name:'Own delivery'},{id:'Customer pickup',name:'Customer pickup'},{id:'Parcel service',name:'Parcel service'}],agent:[{id:'Direct',name:'Direct'},{id:'Arun Kumar',name:'Arun Kumar'}],vehicle:[{id:'KL 01 AB 2345',name:'KL 01 AB 2345'},{id:'KL 01 CD 6789',name:'KL 01 CD 6789'}]
 };
 window.RAJADHANI_PREVIEW_CONFIG = {
- connectionLinkName:'preview-only',organizationId:'preview-org',customFields:fields,invoiceQuantityMode:'pieces',itemFields:{mu:'cf_m_unit',ratio:'cf_ratio'},lookupSources:Object.fromEntries(Object.keys(lookups).map(key=>[key,{path:`/preview/${key}`,key:'records',idKey:'id',labelKey:'name'}]))
+ lineCustomFields:{billNo:{label:'BillNO',id:'demo-line-bill'},billDate:{label:'Ref_Bill Date',id:'demo-line-date'}},connectionLinkName:'preview-only',organizationId:'preview-org',customFields:fields,invoiceQuantityMode:'pieces',itemFields:{mu:'cf_m_unit',ratio:'cf_ratio'},lookupSources:Object.fromEntries(Object.keys(lookups).map(key=>[key,{path:`/preview/${key}`,key:'records',idKey:'id',labelKey:'name'}]))
 };
 const customers = [
  {contact_id:'c1',contact_name:'Malabar Trading Company',company_name:'Malabar Trading Company',email:'accounts@example.com',mobile:'+91 98765 43210',gst_no:'32ABCDE1234F1Z5',place_of_contact:'KL',payment_terms:30,currency_code:'INR',billing_address:{address:'24, Market Road',city:'Kochi',state:'Kerala',zip:'682001',country:'India'},shipping_address:{address:'Warehouse 3, Industrial Estate',city:'Kochi',state:'Kerala',zip:'682030',country:'India',phone:'+91 98765 43210'}},
@@ -43,7 +44,7 @@ window.ZFAPPS = {
   else if(path.startsWith('/itemmasters/'))response={item_master:itemMasters.find(i=>i.item_master_id===path.split('/').pop())};
   else if(path==='/settings/taxes')response={taxes};
   else if(path==='/salespersons')response={salespersons:[{salesperson_id:'s1',salesperson_name:'Arun Kumar'},{salesperson_id:'s2',salesperson_name:'Meera Nair'}]};
-  else if(path==='/locations')response={locations:[{location_id:'loc1',location_name:'Main warehouse · Kochi'},{location_id:'loc2',location_name:'Thrissur branch'}]};
+  else if(path==='/locations')response={locations:[{location_id:'loc1',location_name:'Main warehouse · Kochi',type:'general'},{location_id:'loc2',location_name:'Thrissur Godown',type:'line_item_only',parent_location_id:'loc1'}]};
   else if(path==='/invoices')response={invoices:invoices.filter(o=>!q.customer_id || String(o.customer_id)===String(q.customer_id)).map(({line_items,...o})=>o)};
   else if(path.startsWith('/invoices/'))response={invoice:invoices.find(o=>o.invoice_id===path.split('/').pop())};
   else if(path.startsWith('/preview/'))response={records:lookups[path.split('/').pop()]||[]};

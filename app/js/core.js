@@ -107,7 +107,10 @@ export function validateCreditNote(state, values, config) {
   if (!invoiceLines.length) errors.push('Add at least one item.');
   if (state.lines.some(l => l.notFound)) errors.push('Remove or correct scanned items marked Item not found.');
   if (config.requireSalesperson && !values.salesperson_id) errors.push('Select a salesperson.');
-  if (config.requireLocation && !values.location_id) errors.push('Select a business location.');
+  if (config.requireLocation && !values.godown_id) errors.push('Select a Godown.');
+  for (const mapping of Object.values(config.lineCustomFields || {})) {
+    if (!mapping.id && !mapping.apiName) errors.push(`Configure the API name or ID for line field ${mapping.label}.`);
+  }
   if (!['pieces','order'].includes(config.invoiceQuantityMode)) errors.push('Confirm how order quantity and P. quantity should be saved to ERP before saving.');
   invoiceLines.forEach((line, index) => {
     if (!hasValidDiscount(line)) errors.push(`Item ${index + 1}${line.name ? ` (${line.name})` : ''}: enter a discount percentage from 0 to 100.`);
@@ -151,7 +154,11 @@ export function makePayload(state, values, config) {
       ...(taxId ? { tax_id: String(taxId) } : { tax_exemption_id: l.tax_exemption_id }),
       invoice_id: String(l.sourceBill.invoiceId), invoice_item_id: String(l.sourceBill.lineId),
       description: `Bill ${l.sourceBill.number} | Ref ${l.sourceBill.reference || '—'} | ${l.sourceBill.date}`,
-      ...(l.sourceBill.locationId ? {location_id: l.sourceBill.locationId} : {})
+      ...(values.godown_id ? {location_id: String(values.godown_id)} : {}),
+      item_custom_fields: Object.entries(config.lineCustomFields || {}).map(([key, mapping]) => {
+        if (!mapping.id && !mapping.apiName) throw new Error(`Configure the API name or ID for line field ${mapping.label}.`);
+        return {...(mapping.id ? {customfield_id: String(mapping.id)} : {api_name: mapping.apiName}), value: key === 'billNo' ? l.sourceBill.number : l.sourceBill.date};
+      })
     });}),
     discount_type: 'item_level', is_discount_before_tax: true, is_inclusive_tax: false,
     adjustment: totals.adjustment, adjustment_description: 'Rounding', notes: values.notes,
