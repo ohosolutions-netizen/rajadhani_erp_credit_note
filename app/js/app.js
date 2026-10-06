@@ -1,0 +1,396 @@
+import { ERP } from './erp.js';
+import { calculate, validateCreditNote, makePayload, pieceQuantity, itemPacking, lineAmounts, taxPreference, hasValidDiscount, creditNoteDetailUrl } from './core.js';
+const $ = id => document.getElementById(id);
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const config = await fetch(new URL('../config.json', import.meta.url)).then(r => { if (!r.ok) throw new Error('Cannot load widget configuration'); return r.json(); });
+if (window.RAJADHANI_PREVIEW_CONFIG) Object.assign(config, window.RAJADHANI_PREVIEW_CONFIG);
+const api = new ERP(config, window.ZFAPPS);
+const state = { customer: null, lines: [], taxes: [], currency: 'INR', busy: false, saved: false, allowClose: false, uncertain: false, customerVersion: 0, pendingOperations: 0, pendingSO: { item: null, rows: [], loading: false, error: '' } };
+let approvedPayload = null;
+function pending(delta) { state.pendingOperations += delta; $('saveButton').disabled = state.pendingOperations > 0 || state.saved || state.uncertain; }
+const money = n => new Intl.NumberFormat('en-IN', { style: 'currency', currency: state.currency }).format(Number.isFinite(n) ? n : 0);
+function notice(message, kind = '') { $('noticeText').textContent = message; $('notice').className = `notice ${kind}`; $('notice').hidden = !message; }
+function error(err) { notice(err.message || String(err), 'error'); }
+$('noticeClose').addEventListener('click', () => notice(''));
+function hasUnsavedWork() {
+  if (state.saved || state.allowClose) return false;
+  if (state.customer || state.lines.length) return true;
+  const ids = ['customerSearch','itemSearch','placeOfSupply','shippingGst','shippingAddress','notes'];
+  if (ids.some(id => String($(id)?.value || '').trim() && String($(id)?.value || '').trim() !== '0')) return true;
+  return Object.keys(config.customFields).some(k => String($(`cf_${k}`)?.value || '').trim());
+}
+async function exitAfterSave(invoiceId) {
+  await new Promise(resolve => setTimeout(resolve, 900));
+  const organizationId=config.organizationId || api.organization?.organization_id;
+  const url=creditNoteDetailUrl(organizationId,invoiceId);
+  try { window.top.location.href=url; return; } catch { /* Cross-origin webtabs can block top navigation. */ }
+  try { window.parent.location.href=url; return; } catch { /* Fall through to the widget frame. */ }
+  try { window.location.href=url; } catch {
+    try { await window.ZFAPPS?.closeModal?.(); } catch { /* Leave the saved confirmation visible. */ }
+  }
+}
+function fieldMarkup(key) {
+  const f = config.customFields[key];
+  const type = /phone|mobile|whatsapp/i.test(key) ? 'tel' : 'text';
+  const fixedOptions = key === 'billType' ? ['Cash','Credit','Credit-Account'] : null;
+  const input = fixedOptions ? `<select id="cf_${key}" ${f.required ? 'required' : ''}><option value="">Select ${esc(f.label.toLowerCase())}</option>${fixedOptions.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>` : config.lookupSources[key] ? `<select id="cf_${key}" ${f.required ? 'required' : ''}><option value="">Select ${esc(f.label.toLowerCase())}</option></select>` : `<input id="cf_${key}" type="${type}" ${f.required ? 'required' : ''} placeholder="${key === 'billCreatedBy' ? 'Current ERP user' : esc(f.label)}">`;
+  return `<div class="field"><label for="cf_${key}">${esc(f.label)} ${f.required && f.id ? '<em>*</em>' : ''}</label>${input}${!f.id ? '<small class="mappinghint">Not sent to ERP yet</small>' : ''}</div>`;
+}
+$('billingFields').innerHTML = ['billType','billCreatedBy','mobile','whatsapp','shippingPhone'].map(fieldMarkup).join('');
+$('dispatchFields').innerHTML = ['transport','agent','vehicle'].map(fieldMarkup).join('');
+$('invoiceDate').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,10);
+function getValues() {
+  return { date: $('invoiceDate').value, place_of_supply: $('placeOfSupply').value.trim().toUpperCase(), salesperson_id: $('salesperson').value, location_id: $('location').value,
+    shipping_gst_no: $('shippingGst').value.trim(), shipping_address: $('shippingAddress').value.trim(), notes: $('notes').value.trim(), sameAsBilling: $('sameAsBilling').checked,
+    rounded: true,
+    custom: Object.fromEntries(Object.keys(config.customFields).map(k => [k, $(`cf_${k}`)?.value?.trim?.() ?? ''])) };
+}
+function totals() {
+  const v = getValues(); const t = calculate(state.lines, v.rounded, v.place_of_supply === (config.organizationStateCode || 'KL'));
+  for (const [id, key] of Object.entries({subtotal:'subtotal',discountAmount:'discount',taxTotal:'tax',roundValue:'adjustment',grandTotal:'total'})) $(id).textContent = `${id === 'discountAmount' ? '− ' : ''}${money(t[key])}`;
+  const intraState = v.place_of_supply === (config.organizationStateCode || 'KL');
+  $('taxBreakdown').innerHTML = intraState
+    ? `<div class="summaryrow"><span>CGST</span><span>${esc(money(t.cgst))}</span></div><div class="summaryrow"><span>SGST</span><span>${esc(money(t.sgst))}</span></div>`
+    : `<div class="summaryrow"><span>IGST</span><span>${esc(money(t.tax))}</span></div>`;
+  $('totalDetail').textContent = `${state.lines.length} item${state.lines.length === 1 ? '' : 's'} in this credit note`;
+  $('lineCount').textContent = state.lines.length;
+  $('qtySummary').textContent = `${state.lines.length} items · ${Math.round(state.lines.reduce((s,l)=>s+l.quantity,0)*1000)/1000} order qty · ${Math.round(state.lines.reduce((s,l)=>s+(l.pieces ? pieceQuantity(l) : 0),0)*1000)/1000} pieces`;
+}
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    notice('Item ERP response copied. Paste it here and I will map M Unit and Ratio exactly.', 'success');
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.left = '-9999px';
+    document.body.append(area);
+    area.select();
+    const copied = document.execCommand('copy');
+    area.remove();
+    notice(copied ? 'Item ERP response copied. Paste it here and I will map M Unit and Ratio exactly.' : 'Could not copy automatically. Open the browser console and copy the Rajadhani item debug output.', copied ? 'success' : 'error');
+  }
+}
+const qty = n => Math.round(Number(n || 0) * 1000) / 1000;
+async function loadPendingSO() {}
+
+function focusInvoiceItems(focusIndex = null) {
+  requestAnimationFrame(() => {
+    $('invoiceItemsCard')?.scrollIntoView({block:'start', behavior:'smooth'});
+    if (focusIndex != null) $('lineItems').children[focusIndex]?.scrollIntoView({block:'nearest'});
+  });
+}
+function focusDiscount(index, force=false) {
+  requestAnimationFrame(() => {
+    const active=document.activeElement;
+    const mayMove=active===document.body || (active===$('itemSearch') && !active.value) || active?.closest?.('#itemResults');
+    if (!force && !mayMove) return;
+    const discount=$(`lineItems`).querySelector(`[data-row="${index}"][data-field="discount"]`);
+    if (discount && !discount.disabled) discount.focus(); else $('itemSearch').focus();
+  });
+}
+function renderLines(focusIndex = null, focusItems = false) {
+  $('emptyItems').hidden = !!state.lines.length;
+  $('lineItems').innerHTML = state.lines.map((l,i) => l.notFound ? `<tr data-line="${i}" class="notfoundline"><td>${i+1}</td><td colspan="13"><strong>Item not found</strong><small>Scanned value: ${esc(l.scanText || l.sku || '')}. Check the barcode/item code in ERP.</small></td><td><button class="remove" type="button" data-remove="${i}" aria-label="Remove item not found warning">×</button></td></tr>` : `<tr data-line="${i}" class="${l.loading ? 'loadingline' : ''}"><td>${i+1}</td><td class="itemname"><strong>${esc(l.name)}</strong><small>${esc(l.sku || 'No SKU')} · HSN ${esc(l.hsn_or_sac || '—')}</small>${l.loading ? '<small class="loadingnote">Loading ERP item details…</small>' : ''}${l.packingError ? `<small class="packingerror">${esc(l.packingError)}</small>${l.itemDebug ? `<button class="debugcopy" type="button" data-debug="${i}">Copy item response</button>` : ''}` : ''}</td><td><button type="button" class="button billbutton" data-bill="${i}" ${l.loading ? 'disabled' : ''}>${esc(l.sourceBill?.number || 'Select bill')}</button></td><td>${esc(l.sourceBill?.reference || '—')}</td><td>${esc(l.sourceBill?.date || '—')}</td><td>${esc(l.stock ?? '—')}<small>${esc(l.mu || l.unit || 'units')}</small></td><td>${l.loading ? '…' : esc(l.pieces || '—')}</td><td><input type="number" min="0.001" step="any" value="${l.quantity}" data-row="${i}" data-field="quantity" aria-label="Quantity for ${esc(l.name)}" required></td><td data-piece="${i}">${l.loading ? '…' : l.pieces ? l.pieces*l.quantity : '—'}</td><td><input type="number" min="0" step="0.01" value="${l.rate}" data-row="${i}" data-field="rate" aria-label="Rate for ${esc(l.name)}" required></td><td><input type="number" min="0" max="100" step="any" value="${l.discount ?? 0}" data-row="${i}" data-field="discount" aria-label="Discount percent for ${esc(l.name)}" ${l.loading ? 'disabled' : ''}></td><td class="right" data-discount="${i}">${l.loading ? '…' : esc(money(lineAmounts(l).discount))}</td><td><select data-row="${i}" data-field="tax" aria-label="Tax for ${esc(l.name)}" disabled><option value="">${l.loading ? 'Loading…' : l.tax_exemption_id ? 'ERP exempt' : 'Select tax'}</option>${state.taxes.map(t=>`<option value="${esc(t.id)}" ${String(l.tax?.id)===String(t.id)?'selected':''}>${esc(t.name)} (${t.percentage}%)</option>`).join('')}</select></td><td class="right" data-amount="${i}">${l.loading ? '…' : esc(money(lineAmounts(l).taxable))}</td><td><button class="remove" type="button" data-remove="${i}" aria-label="Remove ${esc(l.name)}">×</button></td></tr>`).join('');
+  totals();
+  if (!state.lines.length) loadPendingSO(null);
+  if (focusIndex != null || focusItems) focusInvoiceItems(focusIndex);
+}
+$('lineItems').addEventListener('input', e => {
+  const {row,field} = e.target.dataset; if (row == null || !field) return;
+  const l=state.lines[Number(row)]; if (!l || l.notFound) return; l[field] = field === 'discount' && e.target.value === '' ? undefined : field === 'tax' ? state.taxes.find(t=>String(t.id) === e.target.value) : Number(e.target.value);
+  document.querySelector(`[data-amount="${row}"]`).textContent = money(lineAmounts(l).taxable);
+  document.querySelector(`[data-discount="${row}"]`).textContent = money(lineAmounts(l).discount);
+  document.querySelector(`[data-piece="${row}"]`).textContent = l.pieces ? Math.round(l.pieces*l.quantity*1000)/1000 : '—'; totals();
+});
+$('lineItems').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.dataset.field === 'discount') { e.preventDefault(); $('itemSearch').focus(); }
+});
+$('lineItems').addEventListener('click', e => {
+  const bill=e.target.closest('[data-bill]'); if(bill){openBills(state.lines[Number(bill.dataset.bill)]);return;}
+  const debug=e.target.closest('[data-debug]');
+  if (debug) {
+    const line=state.lines[Number(debug.dataset.debug)];
+    if (line?.itemDebug) copyText(JSON.stringify(line.itemDebug, null, 2));
+    return;
+  }
+  const b=e.target.closest('[data-remove]'); if (b) { state.lines.splice(Number(b.dataset.remove),1);renderLines(); return; }
+  const row=e.target.closest('tr[data-line]');
+  if (row && !e.target.closest('input,select,button')) { const line=state.lines[Number(row.dataset.line)]; if(!line?.notFound) loadPendingSO(line); }
+});
+
+let billLookupSequence = 0;
+async function openBills(line) {
+  if (!state.customer || !line || line.loading) return;
+  const token = ++billLookupSequence, version = state.customerVersion;
+  const dialog = $('billDialog');
+  $('billTitle').textContent = `Bills for ${line.sku || line.name}`;
+  $('billStatus').textContent = 'Loading all invoice transactions for this customer and item…';
+  $('billRows').replaceChildren(); $('billFilter').value = '';
+  dialog.showModal(); pending(1);
+  try {
+    const rows = await api.itemTransactions(state.customer.contact_id, line.item_id);
+    if (token !== billLookupSequence || version !== state.customerVersion || !state.lines.includes(line) || !dialog.open) return;
+    $('billStatus').textContent = rows.length ? `${rows.length} transaction lines. Quantities are in ERP invoice units. Draft and void invoices cannot be selected.` : 'No invoice transactions found for this customer and item.';
+    const render = () => {
+      const needle = $('billFilter').value.trim().toLowerCase();
+      $('billRows').innerHTML = rows.map((r,index)=>({r,index})).filter(({r})=>`${r.number} ${r.reference} ${r.date}`.toLowerCase().includes(needle)).map(({r,index})=>`<tr><td>${esc(r.number)}</td><td>${esc(r.reference || '—')}</td><td>${esc(r.date)}</td><td>${esc(r.status)}</td><td>${esc(r.quantity)}</td><td>${esc(money(r.rate))}</td><td><button type="button" class="button" data-transaction="${index}" ${r.selectable ? '' : 'disabled'}>Select</button></td></tr>`).join('');
+    };
+    $('billFilter').oninput = render;
+    $('billRows').onclick = event => {
+      const button = event.target.closest('[data-transaction]'); if (!button) return;
+      if (version !== state.customerVersion || !state.lines.includes(line)) { dialog.close(); return; }
+      const r = rows[Number(button.dataset.transaction)]; if (!r?.selectable) return;
+      try {
+        if (r.currency && r.currency !== state.currency) throw new Error('The invoice currency differs from this credit note.');
+        if (r.headerDiscount) throw new Error('Invoice-level discounts require the native ERP Credit Note editor.');
+        if (r.inclusive) throw new Error('Tax-inclusive invoices require the native ERP Credit Note editor.');
+        if (r.supply && r.supply !== $('placeOfSupply').value.trim().toUpperCase()) throw new Error('The invoice place of supply differs. Match the credit note place of supply before selecting this bill.');
+        const divisor = config.invoiceQuantityMode === 'order' ? Number(line.pieces) : 1;
+        if (!divisor) throw new Error('Wait for valid item packing before selecting a bill.');
+        line.sourceBill = r;
+        line.rate = r.rate / divisor;
+        line.discount = r.discount;
+        line.taxPreferences = [];
+        line.tax = r.taxId ? (state.taxes.find(t=>String(t.id)===r.taxId) || {id:r.taxId,name:r.taxName || 'Invoice tax',percentage:r.taxPercentage}) : null;
+        if (line.tax && !state.taxes.some(t=>t.id===line.tax.id)) state.taxes.push(line.tax);
+        line.tax_exemption_id = r.exemption;
+        line.quantity = Math.min(line.quantity, config.invoiceQuantityMode === 'pieces' ? r.quantity / line.pieces : r.quantity);
+        renderLines(); dialog.close();
+      } catch(e) { $('billStatus').textContent=e.message; }
+    };
+    render();
+  } catch(e) { if(token===billLookupSequence && dialog.open) $('billStatus').textContent=`Could not load transactions. Close and click Bill to retry. ${e.message}`; }
+  finally { pending(-1); }
+}
+
+function address(a) { return a ? [a.attention,a.address,a.street2,[a.city,a.state,a.zip].filter(Boolean).join(', '),a.country].filter(Boolean).join('\n') || 'No address recorded in ERP.' : 'No address recorded in ERP.'; }
+function addresses() {
+  $('billingAddress').textContent=address(state.customer?.billing_address);
+  $('shippingAddress').value=$('sameAsBilling').checked && state.customer ? address(state.customer.billing_address) : '';
+  $('shippingGst').value=$('sameAsBilling').checked ? $('gstNumber').value : (state.customer?.shipping_gst_no || '');
+}
+$('sameAsBilling').addEventListener('change', addresses);
+function selectOptions(id, records, idKey, nameKey, placeholder) { const current=$(id).value;$(id).replaceChildren(new Option(placeholder,''),...records.filter(r=>r.status!=='inactive'&&r.is_active!==false).map(r=>new Option(r[nameKey] || r.name || String(r[idKey]),String(r[idKey]))));if(records.some(r=>String(r[idKey])===current))$(id).value=current; }
+async function chooseCustomer(record) {
+  const version=++state.customerVersion;
+  state.customer=null;
+  $('customerSearch').value=record.contact_name; $('customerHint').textContent='Loading customer details…';
+  pending(1);
+  try {
+    const c=await api.customer(record.contact_id); if(version!==state.customerVersion)return;
+    if(!c)throw new Error('ERP did not return the selected customer.');
+    if(c.status==='inactive')throw new Error('This customer is inactive. Choose an active customer.');
+    if(c.currency_code && api.organization?.currency_code && c.currency_code!==api.organization.currency_code)throw new Error('This customer uses another currency. Use the native ERP editor to apply exchange rates and price lists.');
+    state.customer=c;state.currency=c.currency_code || api.organization?.currency_code || 'INR';$('currencyLabel').textContent=state.currency;
+    $('customerSearch').value=c.contact_name; $('customerHint').textContent=[c.company_name,c.email].filter(Boolean).join(' · ') || 'Customer loaded from ERP';
+    $('gstNumber').value=c.gst_no || ''; $('shippingGst').value=c.shipping_gst_no || '';
+    $('placeOfSupply').value=c.place_of_contact || c.place_of_supply || '';
+    $('cf_mobile').value=c.mobile || c.contact_persons?.find(p=>p.is_primary_contact)?.mobile || c.phone || '';
+    $('cf_shippingPhone').value=c.shipping_address?.phone || '';
+    for(const [k,m] of Object.entries(config.customFields)) { const source=(c.custom_fields||[]).find(f=>m.customerApiName && f.api_name===m.customerApiName); if(source && $(`cf_${k}`))$(`cf_${k}`).value=source.value ?? ''; }
+    addresses();applySupplyTaxes();
+    requestAnimationFrame(() => $('itemSearch').focus());
+  }catch(e){if(version===state.customerVersion){error(e);$('customerHint').textContent='Could not load customer. Search again.';}}finally{pending(-1);}
+}
+const normalized = value => String(value || '').trim().toLocaleLowerCase();
+const scannerMatch = (records, text) => {
+  const needle = normalized(text);
+  const exact = records.find(r => [r.sku, r.item_code, r.item_code_formatted, r.barcode, r.ean, r.upc, r.name].some(v => normalized(v) === needle));
+  return exact || records[0] || null;
+};
+function searchable(inputId, resultsId, search, key, describe, choose, options = {}) {
+  const input=$(inputId), box=$(resultsId); let timer, sequence=0, page=1, query='';
+  const close=()=>{box.hidden=true;input.setAttribute('aria-expanded','false');};
+  async function run(append=false, autoChoose=false) {
+    clearTimeout(timer);
+    const token=++sequence; if(!append){page=1;query=input.value.trim();if(!query){box.replaceChildren();close();return;}box.innerHTML='<p>Searching ERP…</p>';}
+    box.hidden=false;input.setAttribute('aria-expanded','true');
+    try { const r=await search(query,page);if(token!==sequence)return;const records=(r[key]||[]).filter(x=>x.status!=='inactive' && x.is_active!==false);
+      if (autoChoose) {
+        const record = scannerMatch(records, query);
+        if (record) { box.replaceChildren(); close(); await choose(record, {fast:true}); return; }
+      }
+      if(!append)box.replaceChildren();else box.querySelector('[data-more]')?.remove();
+      if(!records.length&&!append)box.innerHTML='<p>No matching records. Try a different search.</p>';
+      records.forEach(record=>{const b=document.createElement('button');b.type='button';b.setAttribute('role','option');const [name,detail]=describe(record);b.innerHTML=`${esc(name)}<span>${esc(detail)}</span>`;b.onclick=async()=>{close();try{await choose(record);}catch(e){error(e);}};box.append(b);});
+      const ctx=Array.isArray(r.page_context)?r.page_context[0]:r.page_context;if(ctx?.has_more_page){const b=document.createElement('button');b.type='button';b.dataset.more='true';b.textContent='Load more results →';b.onclick=()=>{page++;run(true);};box.append(b);}
+    }catch(e){if(token===sequence)box.innerHTML=`<p>${esc(e.message)}</p>`;}
+  }
+  input.addEventListener('input',()=>{sequence++;clearTimeout(timer);box.replaceChildren();close();if(!input.value.trim())return;timer=setTimeout(()=>run(),280);});
+  input.addEventListener('keydown',async e=>{if(e.key==='Escape')close();if(e.key==='ArrowDown'){e.preventDefault();if(input.value.trim()){if(box.hidden)run();else box.querySelector('button')?.focus();}}if(e.key==='Enter'||(e.key==='Tab'&&options.scanOnEnter&&input.value.trim())){e.preventDefault();const text=input.value.trim();if(options.scanImmediate){sequence++;clearTimeout(timer);box.replaceChildren();close();await options.scanImmediate(text);return;}const choices=box.querySelectorAll('button[role=option]');if(choices.length===1&&!box.hidden)choices[0].click();else await run(false, !!options.scanOnEnter);}});
+  box.addEventListener('keydown',e=>{const buttons=[...box.querySelectorAll('button')],index=buttons.indexOf(document.activeElement);if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();buttons[(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();}if(e.key==='Escape'){close();input.focus();}});
+  document.addEventListener('click',e=>{if(!box.contains(e.target)&&e.target!==input)close();});
+  return run;
+}
+searchable('customerSearch','customerResults',(q,p)=>api.searchCustomers(q,p),'contacts',c=>[c.contact_name,[c.company_name,c.mobile || c.email].filter(Boolean).join(' · ')],chooseCustomer);
+$('customerSearch').addEventListener('input',()=>{state.customerVersion++;state.customer=null;state.lines=[];renderLines();$('gstNumber').value='';$('shippingGst').value='';$('placeOfSupply').value='';['mobile','whatsapp','shippingPhone'].forEach(k=>$(`cf_${k}`).value='');$('customerHint').textContent='Choose a matching ERP customer';addresses();});
+function normalizeTax(t){return {id:String(t.tax_id || t.tax_group_id || t.id || ''),name:t.tax_name || t.tax_group_name || t.name || t.tax_name_formatted || t.text,percentage:Number(t.tax_percentage ?? t.tax_group_percentage ?? t.percentage ?? 0)};}
+function isIntraState() {
+  const supply = $('placeOfSupply').value.trim().toUpperCase();
+  return !supply || supply === (config.organizationStateCode || 'KL');
+}
+function itemTax(item, intraState=isIntraState()) {
+  const preferences = item.item_tax_preferences || [];
+  const preferred = taxPreference(preferences, intraState)
+    || (intraState ? preferences[0] : null)
+    || (!preferences.length ? item : null);
+  if (!preferred) return null;
+  const id = preferred.tax_id || preferred.tax_group_id || item.tax_id;
+  if (!id) return null;
+  const existing = state.taxes.find(t => String(t.id) === String(id));
+  if (existing) return existing;
+  const tax = normalizeTax({...preferred, tax_id: id});
+  if (tax.id && tax.name && Number.isFinite(tax.percentage)) {
+    state.taxes.push(tax);
+    return tax;
+  }
+  return null;
+}
+function applySupplyTaxes() {
+  const supply = $('placeOfSupply').value.trim().toUpperCase();
+  if (supply && !/^[A-Z]{2}$/.test(supply)) { totals(); return; }
+  state.lines.forEach(line => {
+    if (line.sourceBill || !line.taxPreferences?.length) return;
+    line.tax = itemTax({item_tax_preferences:line.taxPreferences}, isIntraState());
+  });
+  renderLines();
+}
+$('placeOfSupply').addEventListener('input', applySupplyTaxes);
+function debugSnapshot(selectedRecord, itemResponse, masterId, masterResponse, mergedItem, masterError) {
+  const clean = value => JSON.parse(JSON.stringify(value, (key, data) => key === '__rajadhaniDebug' ? undefined : data));
+  return {
+    selectedRecord: clean(selectedRecord),
+    itemResponse: clean(itemResponse),
+    masterId: masterId ?? null,
+    masterResponse: masterResponse ? clean(masterResponse) : null,
+    mergedItem: clean(mergedItem),
+    ...(masterError ? {masterError} : {})
+  };
+}
+async function fullItem(record) {
+  const item = await api.item(record.item_id);
+  if (!item) throw new Error('ERP did not return item details.');
+  const masterId = item.item_master_id || record.item_master_id || item.group_id || record.group_id;
+  if (!masterId) {
+    item.__rajadhaniDebug = debugSnapshot(record, item, null, null, item);
+    console.info('Rajadhani item debug', item.__rajadhaniDebug);
+    return item;
+  }
+  try {
+    const master = await api.itemMaster(masterId);
+    if (!master) {
+      item.__rajadhaniDebug = debugSnapshot(record, item, masterId, null, item);
+      console.info('Rajadhani item debug', item.__rajadhaniDebug);
+      return item;
+    }
+    const merged = {
+      ...master,
+      ...item,
+      custom_fields: [...(master.custom_fields || []), ...(item.custom_fields || [])],
+      custom_field_hash: {...(master.custom_field_hash || master.customfield_hash || {}), ...(item.custom_field_hash || item.customfield_hash || {})}
+    };
+    merged.__rajadhaniDebug = debugSnapshot(record, item, masterId, master, merged);
+    console.info('Rajadhani item debug', merged.__rajadhaniDebug);
+    return merged;
+  } catch (err) {
+    notice(`Item master custom fields could not be loaded for ${item.name || record.name}. Check ERP.items.READ/settings access or map the item custom-field IDs in app/config.json. ${err.message}`, 'error');
+    item.__rajadhaniDebug = debugSnapshot(record, item, masterId, null, item, err.message);
+    console.info('Rajadhani item debug', item.__rajadhaniDebug);
+    return item;
+  }
+}
+async function lineFromItem(item, extra={}) {
+  const tax = itemTax(item);
+  const packing = itemPacking(item, config.itemFields);
+  return {item_id:String(item.item_id),name:item.name,sku:item.sku,hsn_or_sac:item.hsn_or_sac,stock:item.available_stock ?? item.stock_on_hand,unit:item.unit,rate:Number(item.rate||0),quantity:1,discount:0,tax,taxPreferences:item.item_tax_preferences || [],tax_exemption_id:item.tax_exemption_id,...packing,itemDebug:item.__rajadhaniDebug,tracked:!!(item.is_serial_number_tracking_enabled||item.is_batch_tracking_enabled||item.is_storage_location_enabled),...extra};
+}
+function quickLineFromRecord(record) {
+  return {item_id:String(record.item_id),name:record.name || record.item_name || record.sku || 'Scanned item',sku:record.sku || record.item_code,hsn_or_sac:record.hsn_or_sac,stock:record.available_stock ?? record.stock_on_hand,unit:record.unit,rate:Number(record.rate||0),quantity:1,tax:null,tax_exemption_id:record.tax_exemption_id,mu:record.unit || '',pieces:null,loading:true};
+}
+function quickLineFromScan(text) {
+  return {item_id:`scan:${Date.now()}:${text}`,name:`Scanning ${text}`,sku:text,scanText:text,hsn_or_sac:'',stock:'—',unit:'',rate:0,quantity:1,tax:null,tax_exemption_id:null,mu:'',pieces:null,loading:true,scanPlaceholder:true};
+}
+async function addItem(record, options={}) {
+  if(!state.customer)throw new Error('Select a customer before adding items.');
+  let placeholder=options.placeholder || null;
+  const existingIndex=state.lines.findIndex(l=>String(l.item_id)===String(record.item_id)&&!l.sourceBill&&!l.loading);
+  if(existingIndex>=0){if(placeholder){const index=state.lines.indexOf(placeholder);if(index>=0)state.lines.splice(index,1);}state.lines[existingIndex].quantity++;$('itemSearch').value='';renderLines(existingIndex,true);loadPendingSO(state.lines[existingIndex]);focusDiscount(existingIndex);return;}
+  const version=state.customerVersion;
+  if(placeholder){const index=state.lines.indexOf(placeholder);if(index>=0){state.lines[index]={...quickLineFromRecord(record),quantity:placeholder.quantity || 1};placeholder=state.lines[index];renderLines(index,true);$('itemSearch').focus();}}
+  else if(options.fast){placeholder=quickLineFromRecord(record);state.lines.push(placeholder);$('itemSearch').value='';renderLines(state.lines.length-1,true);$('itemSearch').focus();}
+  pending(1);
+  try{const item=await fullItem(record);if(version!==state.customerVersion)return;
+    const line=await lineFromItem(item);if(line.tracked)throw new Error('This item requires batch, serial or storage allocation. Please use the native ERP Credit Note editor.');
+    const loadingIndex=placeholder ? state.lines.indexOf(placeholder) : -1;
+    const duplicateIndex=state.lines.findIndex((l,i)=>i!==loadingIndex&&String(l.item_id)===line.item_id&&!l.sourceBill&&!l.loading);
+    if(duplicateIndex>=0){state.lines[duplicateIndex].quantity += placeholder?.quantity || 1;if(loadingIndex>=0)state.lines.splice(loadingIndex,1);renderLines(duplicateIndex,true);loadPendingSO(state.lines[duplicateIndex]);focusDiscount(duplicateIndex);}
+    else if(loadingIndex>=0){state.lines[loadingIndex]={...line,quantity:placeholder.quantity};renderLines(loadingIndex,true);loadPendingSO(state.lines[loadingIndex]);focusDiscount(loadingIndex);}
+    else {state.lines.push(line);const targetIndex=state.lines.length-1;$('itemSearch').value='';renderLines(targetIndex,true);loadPendingSO(state.lines[targetIndex]);focusDiscount(targetIndex);}
+  }catch(e){if(placeholder){const index=state.lines.indexOf(placeholder);if(index>=0){state.lines.splice(index,1);renderLines();}}throw e;}finally{pending(-1);}
+}
+async function scanItemText(text) {
+  if(!state.customer)throw new Error('Select a customer before adding items.');
+  const placeholder=quickLineFromScan(text);
+  state.lines.push(placeholder);$('itemSearch').value='';renderLines(state.lines.length-1);$('itemSearch').focus();pending(1);
+  try{
+    const r=await api.searchItems(text,1);
+    const records=(r.items||[]).filter(x=>x.status!=='inactive' && x.is_active!==false);
+    const record=scannerMatch(records,text);
+    if(!record)throw new Error(`No ERP item found for ${text}.`);
+    await addItem(record,{placeholder,fast:true});
+  }catch(e){const index=state.lines.indexOf(placeholder);if(index>=0){state.lines[index]={...placeholder,name:'Item not found',loading:false,notFound:true,error:e.message};renderLines(index,true);}$('itemSearch').focus();throw e;}
+  finally{pending(-1);}
+}
+const browse=searchable('itemSearch','itemResults',(q,p)=>api.searchItems(q,p),'items',i=>[i.name,`${i.sku || 'No SKU'} · ${money(Number(i.rate||0))} · Stock ${i.available_stock ?? i.stock_on_hand ?? '—'}`],addItem,{scanOnEnter:true,scanImmediate:async text=>{try{await scanItemText(text);}catch(e){error(e);}}});
+$('browseItems').onclick=()=>{$('itemSearch').focus();if($('itemSearch').value.trim())browse();};
+async function loadLookups() {
+  const jobs=[
+    {name:'customers',run:()=>api.searchCustomers('',1)},
+    {name:'items',run:()=>api.searchItems('',1)},
+    {name:'taxes',run:async()=>{state.taxes=(await api.all('/settings/taxes','taxes')).filter(t=>t.is_active!==false).map(normalizeTax);renderLines();}},
+    {name:'salespersons',run:async()=>{const source=config.lookupSources.salesperson;if(source)selectOptions('salesperson',await api.all(source.path,source.key,source.query),source.idKey,source.labelKey,'Select salesperson');else selectOptions('salesperson',await api.salespersons(),'salesperson_id','salesperson_name','Select salesperson');}},
+    {name:'locations',run:async()=>{selectOptions('location',await api.all('/locations','locations'),'location_id','location_name','Organization default');}},
+    ...Object.entries(config.lookupSources).filter(([key])=>key!=='salesperson'&&key!=='billType').map(([key,source])=>({name:config.customFields[key]?.label||key,run:async()=>{if(!$(`cf_${key}`))return;selectOptions(`cf_${key}`,await api.all(source.path,source.key,source.query),source.idKey,source.labelKey,`Select ${config.customFields[key].label.toLowerCase()}`);}}))
+  ];
+  const results=await Promise.allSettled(jobs.map(j=>j.run()));const failures=results.flatMap((r,i)=>r.status==='rejected'?[`${jobs[i].name}: ${r.reason.message}`]:[]);
+  if(failures.length)notice(`Some ERP lists could not load. ${failures.join(' • ')}`,'error');
+  else notice('');
+  return failures;
+}
+async function connect() {
+  try{if(!api.ready)await Promise.race([api.init(),new Promise((_,reject)=>setTimeout(()=>reject(new Error('ERP did not respond. Open the installed widget in your organization and retry.')),12000))]);
+    $('orgId').value=config.organizationId;$('connectionName').value=config.connectionLinkName;
+    if(!config.connectionLinkName)throw new Error('Connection setup required. Add your ERP connection in settings and map the business fields in app/config.json.');
+    const failures=await loadLookups();$('connectionStatus').textContent=window.RAJADHANI_PREVIEW_CONFIG?'Preview · sample data':failures.length?'ERP access incomplete':'ERP connected';$('connectionStatus').className=`status ${window.RAJADHANI_PREVIEW_CONFIG||failures.length?'offline':''}`;
+    $('footerStatus').textContent=api.organization?.name || 'Zoho ERP';
+    try{const user=await api.sdk.get('user');const u=user.user||user;$('cf_billCreatedBy').value=u.name||'';$('avatar').textContent=(u.name||'R').slice(0,1);}catch{/* User name can be entered manually. */}
+  }catch(e){$('connectionStatus').textContent='Setup required';$('connectionStatus').className='status offline';notice(e.message);}
+}
+$('settingsButton').onclick=()=>{$('connectionName').value=config.connectionLinkName;$('orgId').value=config.organizationId;$('settingsDialog').showModal();};
+$('connectButton').onclick=async()=>{if(state.lines.length||state.customer){notice('Close and reopen the widget before changing the ERP connection.');$('settingsDialog').close();return;}config.connectionLinkName=$('connectionName').value.trim();config.organizationId=$('orgId').value.trim();$('settingsDialog').close();await connect();};
+for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>$(b.dataset.close).close();
+$('invoiceForm').addEventListener('submit',e=>{
+  e.preventDefault();if(state.saved||state.busy||state.uncertain)return;
+  if(state.pendingOperations){notice('Wait for ERP records to finish loading before reviewing.');return;}
+  const v=getValues(),errors=validateCreditNote(state,v,config);if(errors.length){notice(errors.join(' '),'error');const index=state.lines.findIndex(l=>!l.notFound&&!hasValidDiscount(l));if(index>=0)focusDiscount(index,true);else if(v.shipping_gst_no && v.shipping_gst_no.length!==15)$('shippingGst').focus();return;}
+  try { approvedPayload=makePayload(state,v,config); } catch(e) { error(e); return; }const t=calculate(state.lines,v.rounded,v.place_of_supply === (config.organizationStateCode || 'KL'));
+  $('reviewContent').innerHTML=`<div class="summaryrow"><span>Customer</span><strong>${esc(state.customer.contact_name)}</strong></div><div class="summaryrow"><span>Credit Note date</span><strong>${esc(v.date)}</strong></div>${state.lines.map(l=>`<div class="summaryrow"><span>${esc(l.name)} · Bill ${esc(l.sourceBill?.number)} (${esc(l.sourceBill?.date)}) · ${l.quantity} × ${l.pieces ?? "?"} = ${l.pieces ? pieceQuantity(l) : "?"} pieces · ${l.discount ?? 0}% discount (${esc(money(lineAmounts(l).discount))})</span><strong>${esc(money(lineAmounts(l).taxable))}</strong></div>`).join('')}<div class="summaryrow"><span>Total Discount Amount</span><strong>${esc(money(t.discount))}</strong></div><div class="grandtotal"><span>Estimated credit note total</span><strong>${esc(money(t.total))}</strong></div><p>This creates a draft credit note. It does not email the customer. ERP will calculate the final total.</p>`;
+  $('saveStatus').textContent='';$('confirmSave').disabled=!!window.RAJADHANI_PREVIEW_CONFIG;if(window.RAJADHANI_PREVIEW_CONFIG)$('saveStatus').textContent='Preview only. No records will be created.';$('reviewDialog').showModal();
+});
+$('confirmSave').onclick=async()=>{
+  if(state.busy||state.saved||state.uncertain||!approvedPayload||window.RAJADHANI_PREVIEW_CONFIG)return;
+  state.busy=true;$('confirmSave').disabled=true;$('saveStatus').textContent='Saving credit note to ERP…';
+  try{const result=await api.createCreditNote(approvedPayload);if(!result.creditnote?.creditnote_id)throw new Error('ERP did not return a Credit Note ID.');
+    state.saved=true;$('reviewDialog').close();$('invoiceNumber').value=result.creditnote.creditnote_number || result.creditnote.creditnote_id;$('saveButton').disabled=true;$('saveButton').textContent='Saved to ERP ✓';
+    notice(`Credit Note ${result.creditnote.creditnote_number || result.creditnote.creditnote_id} saved in ERP (${result.creditnote.status || 'created'}). Final total: ${money(Number(result.creditnote.total))}.`,'success');
+    $('invoiceForm').querySelectorAll('input,select,textarea,button').forEach(e=>e.disabled=true);
+    state.allowClose=true;
+    exitAfterSave(result.creditnote.creditnote_id);
+  }catch(e){if(e.apiRejected){$('saveStatus').textContent=e.message;$('confirmSave').disabled=false;}else{state.uncertain=true;$('saveButton').disabled=true;$('saveStatus').textContent='Could not confirm the result. Check the ERP Credit Note list before starting again to avoid a duplicate. '+e.message;}}finally{state.busy=false;}
+};
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('customerSearch').focus();}});
+window.addEventListener('beforeunload',e=>{if(hasUnsavedWork()){e.preventDefault();e.returnValue='';}});
+renderLines();await connect();
