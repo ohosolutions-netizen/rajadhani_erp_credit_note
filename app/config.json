@@ -8,23 +8,8 @@
       "id": "",
       "required": true
     },
-    "billCreatedBy": {
-      "label": "Bill created by",
-      "id": "",
-      "required": false
-    },
     "whatsapp": {
       "label": "WhatsApp number",
-      "id": "",
-      "required": false
-    },
-    "mobile": {
-      "label": "Mobile number",
-      "id": "",
-      "required": false
-    },
-    "shippingPhone": {
-      "label": "Shipping phone",
       "id": "",
       "required": false
     }

@@ -34,9 +34,9 @@ function fieldMarkup(key) {
   const type = /phone|mobile|whatsapp/i.test(key) ? 'tel' : 'text';
   const fixedOptions = key === 'billType' ? ['Cash','Credit','Credit-Account'] : null;
   const input = fixedOptions ? `<select id="cf_${key}" ${f.required ? 'required' : ''}><option value="">Select ${esc(f.label.toLowerCase())}</option>${fixedOptions.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>` : config.lookupSources[key] ? `<select id="cf_${key}" ${f.required ? 'required' : ''}><option value="">Select ${esc(f.label.toLowerCase())}</option></select>` : `<input id="cf_${key}" type="${type}" ${f.required ? 'required' : ''} placeholder="${key === 'billCreatedBy' ? 'Current ERP user' : esc(f.label)}">`;
-  return `<div class="field"><label for="cf_${key}">${esc(f.label)} ${f.required && f.id ? '<em>*</em>' : ''}</label>${input}${!f.id ? '<small class="mappinghint">Not sent to ERP yet</small>' : ''}</div>`;
+  return `<div class="field"><label for="cf_${key}">${esc(f.label)} ${f.required && (f.id || f.apiName) ? '<em>*</em>' : ''}</label>${input}${!f.id && !f.apiName ? '<small class="mappinghint">Not sent to ERP yet</small>' : ''}</div>`;
 }
-$('billingFields').innerHTML = ['billType','billCreatedBy','mobile','whatsapp','shippingPhone'].map(fieldMarkup).join('');
+$('billingFields').innerHTML = Object.keys(config.customFields).map(fieldMarkup).join('');
 
 $('invoiceDate').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,10);
 function selectedGodown() { return state.warehouses.find(w=>String(w.location_id)===$('location').value); }
@@ -199,8 +199,6 @@ async function chooseCustomer(record) {
     $('customerSearch').value=c.contact_name; $('customerHint').textContent=[c.company_name,c.email].filter(Boolean).join(' · ') || 'Customer loaded from ERP';
     $('gstNumber').value=c.gst_no || ''; $('shippingGst').value=c.shipping_gst_no || '';
     $('placeOfSupply').value=c.place_of_contact || c.place_of_supply || '';
-    $('cf_mobile').value=c.mobile || c.contact_persons?.find(p=>p.is_primary_contact)?.mobile || c.phone || '';
-    $('cf_shippingPhone').value=c.shipping_address?.phone || '';
     for(const [k,m] of Object.entries(config.customFields)) { const source=(c.custom_fields||[]).find(f=>m.customerApiName && f.api_name===m.customerApiName); if(source && $(`cf_${k}`))$(`cf_${k}`).value=source.value ?? ''; }
     addresses();applySupplyTaxes();
     requestAnimationFrame(() => $('itemSearch').focus());
@@ -237,7 +235,7 @@ function searchable(inputId, resultsId, search, key, describe, choose, options =
   return run;
 }
 searchable('customerSearch','customerResults',(q,p)=>api.searchCustomers(q,p),'contacts',c=>[c.contact_name,[c.company_name,c.mobile || c.email].filter(Boolean).join(' · ')],chooseCustomer);
-$('customerSearch').addEventListener('input',()=>{state.customerVersion++;state.customer=null;state.lines=[];renderLines();$('gstNumber').value='';$('shippingGst').value='';$('placeOfSupply').value='';['mobile','whatsapp','shippingPhone'].forEach(k=>$(`cf_${k}`).value='');$('customerHint').textContent='Choose a matching ERP customer';addresses();});
+$('customerSearch').addEventListener('input',()=>{state.customerVersion++;state.customer=null;state.lines=[];renderLines();$('gstNumber').value='';$('shippingGst').value='';$('placeOfSupply').value='';Object.keys(config.customFields).filter(k=>/phone|mobile|whatsapp/i.test(k)).forEach(k=>{if($(`cf_${k}`))$(`cf_${k}`).value='';});$('customerHint').textContent='Choose a matching ERP customer';addresses();});
 function normalizeTax(t){return {id:String(t.tax_id || t.tax_group_id || t.id || ''),name:t.tax_name || t.tax_group_name || t.name || t.tax_name_formatted || t.text,percentage:Number(t.tax_percentage ?? t.tax_group_percentage ?? t.percentage ?? 0)};}
 function isIntraState() {
   const supply = $('placeOfSupply').value.trim().toUpperCase();
@@ -390,7 +388,7 @@ async function connect() {
     if(!config.connectionLinkName)throw new Error('Connection setup required. Add your ERP connection in settings and map the business fields in app/config.json.');
     const failures=await loadLookups();$('connectionStatus').textContent=window.RAJADHANI_PREVIEW_CONFIG?'Preview · sample data':failures.length?'ERP access incomplete':'ERP connected';$('connectionStatus').className=`status ${window.RAJADHANI_PREVIEW_CONFIG||failures.length?'offline':''}`;
     $('footerStatus').textContent=api.organization?.name || 'Zoho ERP';
-    try{const user=await api.sdk.get('user');const u=user.user||user;$('cf_billCreatedBy').value=u.name||'';$('avatar').textContent=(u.name||'R').slice(0,1);}catch{/* User name can be entered manually. */}
+    try{const user=await api.sdk.get('user');const u=user.user||user;$('avatar').textContent=(u.name||'R').slice(0,1);}catch{/* Avatar is optional. */}
   }catch(e){$('connectionStatus').textContent='Setup required';$('connectionStatus').className='status offline';notice(e.message);}
 }
 $('settingsButton').onclick=()=>{$('connectionName').value=config.connectionLinkName;$('orgId').value=config.organizationId;$('settingsDialog').showModal();};

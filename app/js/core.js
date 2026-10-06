@@ -133,7 +133,7 @@ export function validateCreditNote(state, values, config) {
   }
   for (const [key, mapping] of Object.entries(config.customFields)) {
     const value = values.custom[key];
-    if (value !== '' && value != null && !mapping.id) errors.push(`${mapping.label}: configure its Credit Note custom-field ID before saving.`);
+    if (value !== '' && value != null && !mapping.id && !mapping.apiName) errors.push(`${mapping.label}: configure its Credit Note custom-field API name or ID before saving.`);
     if (mapping.required && (value === '' || value == null)) errors.push(`${mapping.label} is required.`);
   }
   return [...new Set(errors)];
@@ -162,7 +162,7 @@ export function makePayload(state, values, config) {
     });}),
     discount_type: 'item_level', is_discount_before_tax: true, is_inclusive_tax: false,
     adjustment: totals.adjustment, adjustment_description: 'Rounding', notes: values.notes,
-    custom_fields: Object.entries(config.customFields).filter(([k, m]) => m.id && values.custom[k] !== '' && values.custom[k] != null).map(([k, m]) => ({ customfield_id: String(m.id), value: values.custom[k] }))
+    custom_fields: Object.entries(config.customFields).filter(([k, m]) => (m.id || m.apiName) && values.custom[k] !== '' && values.custom[k] != null).map(([k, m]) => ({ ...(m.id ? {customfield_id: String(m.id)} : {api_name: m.apiName}), value: values.custom[k] }))
   };
   if (values.salesperson_id) payload.salesperson_id = String(values.salesperson_id);
   if (values.location_id) payload.location_id = String(values.location_id);

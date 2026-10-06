@@ -28,7 +28,7 @@ test('not found scan rows are ignored in totals and block save until removed',()
  assert.ok(errors.some(e=>e.includes('Item not found')));
  assert.ok(errors.some(e=>e.includes('Add at least one item')));
 });
-test('reject invalid quantities and excessive discounts and unmapped custom fields',()=>{const errors=validateCreditNote({...state,lines:[{...lines[0],quantity:0,discount:110}]},{...values,discount:110},{...config,customFields:{transport:{label:'Transport',id:'',required:true}}});assert.ok(errors.some(e=>e.includes('quantity')));assert.ok(errors.some(e=>e.includes('discount')));assert.ok(errors.some(e=>e.includes('custom-field ID')));});
+test('reject invalid quantities and excessive discounts and unmapped custom fields',()=>{const errors=validateCreditNote({...state,lines:[{...lines[0],quantity:0,discount:110}]},{...values,discount:110},{...config,customFields:{transport:{label:'Transport',id:'',required:true}}});assert.ok(errors.some(e=>e.includes('quantity')));assert.ok(errors.some(e=>e.includes('discount')));assert.ok(errors.some(e=>e.includes('custom-field API name or ID')));});
 test('required custom fields are enforced even before their ERP field is mapped',()=>{const errors=validateCreditNote(state,{...values,custom:{transport:''}},config);assert.ok(errors.some(e=>e.includes('Transport is required')));const unmapped=validateCreditNote(state,{...values,custom:{transport:''}},{...config,customFields:{transport:{label:'Transport',id:'',required:true}}});assert.ok(unmapped.some(e=>e.includes('Transport is required')));});
 test('shipping GSTIN is optional but must contain exactly 15 characters when entered',()=>{
  const validState={...state,lines:[{...lines[0],discount:5}]};

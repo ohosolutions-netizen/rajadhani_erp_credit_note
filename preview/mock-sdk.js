@@ -3,7 +3,7 @@
 const fields = {
  billType:{label:'Bill type',id:'demo-bill',required:true},billCreatedBy:{label:'Bill created by',id:'demo-user',required:true},transport:{label:'Transport',id:'demo-transport',required:true},agent:{label:'Agent name',id:'demo-agent'},vehicle:{label:'Vehicle number',id:'demo-vehicle'},whatsapp:{label:'WhatsApp number',id:'demo-whatsapp'},mobile:{label:'Mobile number',id:'demo-mobile',required:true},shippingPhone:{label:'Shipping phone',id:'demo-shipphone'}
 };
-for (const key of ['transport','agent','vehicle']) delete fields[key];
+for (const key of ['transport','agent','vehicle','billCreatedBy','mobile','shippingPhone']) delete fields[key];
 const lookups = {
  billType:[{id:'Cash',name:'Cash'},{id:'Credit',name:'Credit'},{id:'Credit-Account',name:'Credit-Account'}],transport:[{id:'Own delivery',name:'Own delivery'},{id:'Customer pickup',name:'Customer pickup'},{id:'Parcel service',name:'Parcel service'}],agent:[{id:'Direct',name:'Direct'},{id:'Arun Kumar',name:'Arun Kumar'}],vehicle:[{id:'KL 01 AB 2345',name:'KL 01 AB 2345'},{id:'KL 01 CD 6789',name:'KL 01 CD 6789'}]
 };

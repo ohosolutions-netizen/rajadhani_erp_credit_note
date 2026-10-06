@@ -66,3 +66,5 @@ Godown is required and lists all active ERP locations from every page of `/locat
 Set `lineCustomFields.billNo.id` / `.apiName` and `lineCustomFields.billDate.id` / `.apiName` to the actual Credit Note subform identifiers. Labels are `BillNO` and `Ref_Bill Date`; the configured API names are `cf_billno` and `cf_ref_bill_date`. Each row sends `item_custom_fields` with the selected invoice number and invoice date (`YYYY-MM-DD`). A custom-field ID takes precedence over an API name. Saving is blocked while either mapping is missing; no guessed identifiers are submitted. These are line custom fields, separate from document `custom_fields`.
 
 Godown defaults to the unique active location named **Rajadhani** (case-insensitive exact name match). Users can choose another Godown. If the default is absent or ambiguous, selection stays blank and must be made explicitly.
+
+Bill created by, Mobile number and Shipping phone are omitted from the form and document custom-field payload. They are not required for saving. The bill-line API mappings remain `cf_billno` and `cf_ref_bill_date`.
