@@ -177,7 +177,21 @@ export function decodeResponse(response) {
   if (typeof body === 'string') body = JSON.parse(body);
   if (!body || typeof body !== 'object') throw new Error('ERP returned an unreadable response.');
   if (body.code != null && Number(body.code) !== 0) {
-    const err = new Error(body.message || `ERP error ${body.code}`); err.apiRejected = true; throw err;
+    const err = new Error(body.message || `ERP error ${body.code}`); err.apiRejected = true; err.erpCode = body.code; err.erpResponse = body; throw err;
   }
   return body;
+}
+
+// Reports stay in memory; remove authentication material even if echoed by the SDK.
+export function diagnosticJSON(value) {
+  const seen = new WeakSet();
+  return JSON.stringify(value, (key, entry) => {
+    if (/authorization|cookie|token|password|secret|api[_-]?key/i.test(key)) return '[REDACTED]';
+    if (typeof entry === 'string') return entry.replace(/(Zoho-oauthtoken|Bearer)\s+[^\s"',}]+/gi, '$1 [REDACTED]');
+    if (entry && typeof entry === 'object') {
+      if (seen.has(entry)) return '[Circular]';
+      seen.add(entry);
+    }
+    return entry;
+  }, 2);
 }

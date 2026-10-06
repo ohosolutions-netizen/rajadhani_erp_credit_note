@@ -198,3 +198,5 @@ aside{min-width:0;overflow:visible;align-self:stretch}
 /* Dark green theme with readable white table headings. */
 #invoiceItemsCard th,#billDialog th{background:#164d35;color:#fff;border-color:#285f46}
 .billamount{background:#e8f2ec;border-color:#bed4c6}.billamount strong{color:#164d35}
+
+#reviewDialog{max-height:90vh;overflow-y:auto}#saveDebug{margin-top:12px}#saveDebug summary{cursor:pointer;font-weight:600}#saveDebugText{height:240px;font:11px/1.5 monospace;white-space:pre;overflow:auto;resize:vertical}#debugCopyStatus{display:block;margin-top:6px;font-size:11px}

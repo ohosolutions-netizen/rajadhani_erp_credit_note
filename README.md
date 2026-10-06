@@ -70,3 +70,7 @@ Godown defaults to the unique active location named **Rajadhani** (case-insensit
 Bill created by, Mobile number and Shipping phone are omitted from the form and document custom-field payload. They are not required for saving. The bill-line API mappings remain `cf_billno` and `cf_ref_bill_date`.
 
 Bill type is configured with document custom-field API name `cf_bill_type`. The widget uses a dark green theme with white section/table headings.
+
+## Failed-save diagnostics
+
+A failed save expands a copyable debug report below the error in the review dialog. It contains the exact approved POST payload, ERP code and complete response body/SDK envelope, selected Godown, source invoice lines, packing and custom-field mappings. Authentication keys are redacted. Reports stay in page memory; copying does not transmit them. If Zoho supplies only a generic error, the report preserves that limitation rather than inventing a field-level cause.

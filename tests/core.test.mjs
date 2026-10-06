@@ -155,3 +155,11 @@ test('multiple lines accumulate independently rounded GST components',()=>{
  const zero=calculate([{...items[0],discount:100}],true,true);
  assert.equal(zero.tax,0);assert.equal(zero.total,0);
 });
+
+test('debug report redacts credentials and handles circular SDK errors',()=>{
+ const value={payload:{notes:'Return',customer_id:'123'},Authorization:'Bearer test-secret',nested:{access_token:'secret',text:'Zoho-oauthtoken abc123'},cookie:'session'};
+ value.self=value;
+ const text=core.diagnosticJSON(value);
+ assert.ok(!text.includes('test-secret'));assert.ok(!text.includes('abc123'));assert.ok(!text.includes('session'));assert.ok(text.includes('Return'));assert.ok(text.includes('[Circular]'));
+ try {decodeResponse({data:{body:JSON.stringify({code:1001,message:'Invalid values',details:[{field:'location_id'}]})}});assert.fail('must reject');}catch(e){assert.equal(e.erpCode,1001);assert.equal(e.erpResponse.details[0].field,'location_id');}
+});

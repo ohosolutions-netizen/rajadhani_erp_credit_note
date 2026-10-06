@@ -1,5 +1,5 @@
 import { ERP } from './erp.js';
-import { calculate, validateCreditNote, makePayload, pieceQuantity, itemPacking, lineAmounts, taxPreference, hasValidDiscount, creditNoteDetailUrl } from './core.js';
+import { calculate, validateCreditNote, makePayload, pieceQuantity, itemPacking, lineAmounts, taxPreference, hasValidDiscount, creditNoteDetailUrl, diagnosticJSON } from './core.js';
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const config = await fetch(new URL('../config.json', import.meta.url)).then(r => { if (!r.ok) throw new Error('Cannot load widget configuration'); return r.json(); });
@@ -402,16 +402,37 @@ $('invoiceForm').addEventListener('submit',e=>{
   $('reviewContent').innerHTML=`<div class="summaryrow"><span>Customer</span><strong>${esc(state.customer.contact_name)}</strong></div><div class="summaryrow"><span>Credit Note date</span><strong>${esc(v.date)}</strong></div><div class="summaryrow"><span>Godown</span><strong>${esc(selectedGodown()?.location_name || '')}</strong></div>${state.lines.map(l=>`<div class="summaryrow"><span>${esc(l.name)} · Bill ${esc(l.sourceBill?.number)} (${esc(l.sourceBill?.date)}) · ${l.quantity} × ${l.pieces ?? "?"} = ${l.pieces ? pieceQuantity(l) : "?"} pieces · ${l.discount ?? 0}% discount (${esc(money(lineAmounts(l).discount))})</span><strong>${esc(money(lineAmounts(l).taxable))}</strong></div>`).join('')}<div class="summaryrow"><span>Total Discount Amount</span><strong>${esc(money(t.discount))}</strong></div><div class="grandtotal"><span>Estimated credit note total</span><strong>${esc(money(t.total))}</strong></div><p>This creates a draft credit note. It does not email the customer. ERP will calculate the final total.</p>`;
   $('saveStatus').textContent='';$('confirmSave').disabled=!!window.RAJADHANI_PREVIEW_CONFIG;if(window.RAJADHANI_PREVIEW_CONFIG)$('saveStatus').textContent='Preview only. No records will be created.';$('reviewDialog').showModal();
 });
+function showSaveDiagnostics(err) {
+  const report = {
+    widget: 'Rajadhani Credit Note', diagnosticVersion: 1, time: new Date().toISOString(),
+    error: {message: err.message, name: err.name, code: err.erpCode ?? null, apiRejected: !!err.apiRejected},
+    request: {method: 'POST', url: `${config.apiBase}/creditnotes`, organizationId: config.organizationId, payload: approvedPayload},
+    response: err.erpResponse ?? err.requestDiagnostics?.response ?? api.lastCreateResponse ?? null,
+    sdk: err.requestDiagnostics ? {originalMessage: err.requestDiagnostics.originalMessage, envelope: err.requestDiagnostics.response} : null,
+    configuration: {quantityMode: config.invoiceQuantityMode, lineCustomFields: config.lineCustomFields, customFields: config.customFields},
+    godown: selectedGodown() || null,
+    sourceLines: state.lines.map((line,index)=>({row:index+1,itemId:line.item_id,code:line.sku,orderQuantity:line.quantity,piecesPerPack:line.pieces,rate:line.rate,discount:line.discount,tax:line.tax,sourceBill:line.sourceBill})),
+    note: 'Includes customer IDs, transaction data and entered notes. Authentication values are redacted. No data is sent by copying this report.'
+  };
+  $('saveDebugText').value=diagnosticJSON(report);
+  $('saveDebug').hidden=false; $('saveDebug').open=true;
+  $('debugCopyStatus').textContent='';
+}
+$('copySaveDebug').onclick=async()=>{
+  const text=$('saveDebugText').value;
+  try { await navigator.clipboard.writeText(text); $('debugCopyStatus').textContent='Debug report copied.'; }
+  catch { $('saveDebugText').focus(); $('saveDebugText').select(); $('debugCopyStatus').textContent='Report selected. Press Ctrl+C or ⌘C to copy.'; }
+};
 $('confirmSave').onclick=async()=>{
   if(state.busy||state.saved||state.uncertain||!approvedPayload||window.RAJADHANI_PREVIEW_CONFIG)return;
-  state.busy=true;$('confirmSave').disabled=true;$('saveStatus').textContent='Saving credit note to ERP…';
+  state.busy=true;api.lastCreateResponse=null;$('saveDebug').hidden=true;$('confirmSave').disabled=true;$('saveStatus').textContent='Saving credit note to ERP…';
   try{const result=await api.createCreditNote(approvedPayload);if(!result.creditnote?.creditnote_id)throw new Error('ERP did not return a Credit Note ID.');
     state.saved=true;$('reviewDialog').close();$('invoiceNumber').value=result.creditnote.creditnote_number || result.creditnote.creditnote_id;$('saveButton').disabled=true;$('saveButton').textContent='Saved to ERP ✓';
     notice(`Credit Note ${result.creditnote.creditnote_number || result.creditnote.creditnote_id} saved in ERP (${result.creditnote.status || 'created'}). Final total: ${money(Number(result.creditnote.total))}.`,'success');
     $('invoiceForm').querySelectorAll('input,select,textarea,button').forEach(e=>e.disabled=true);
     state.allowClose=true;
     exitAfterSave(result.creditnote.creditnote_id);
-  }catch(e){if(e.apiRejected){$('saveStatus').textContent=e.message;$('confirmSave').disabled=false;}else{state.uncertain=true;$('saveButton').disabled=true;$('saveStatus').textContent='Could not confirm the result. Check the ERP Credit Note list before starting again to avoid a duplicate. '+e.message;}}finally{state.busy=false;}
+  }catch(e){showSaveDiagnostics(e);if(e.apiRejected){$('saveStatus').textContent=`${e.message}${e.erpCode != null ? ` (ERP code ${e.erpCode})` : ''}. See the debug report below.`;$('confirmSave').disabled=false;}else{state.uncertain=true;$('saveButton').disabled=true;$('saveStatus').textContent='Could not confirm the result. Check the ERP Credit Note list before starting again to avoid a duplicate. '+e.message;}}finally{state.busy=false;}
 };
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('customerSearch').focus();}});
 window.addEventListener('beforeunload',e=>{if(hasUnsavedWork()){e.preventDefault();e.returnValue='';}});

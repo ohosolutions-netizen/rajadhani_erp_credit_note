@@ -3,7 +3,7 @@ const fs=require('fs');
 async function start(page,live=false,mode='success'){
  if(live) await page.route('**/dist/CreditNotePreview.html',async route=>{
   let html=fs.readFileSync('dist/CreditNotePreview.html','utf8');
-  html=html.replace('<script type="module">',`<script>const originalRequest=ZFAPPS.request; ZFAPPS.request=async o=>{if(o.method==='POST'){window.sentRequest=o; ${mode==='reject' ? "return {code:14,message:'Credit Note rejected'};" : mode==='network' ? "throw new Error('Network lost');" : "return {code:0,creditnote:{creditnote_id:'cn1',creditnote_number:'CN-1',status:'draft',total:2655}};"}}return originalRequest(o);};</script><script type="module">`);
+  html=html.replace('<script type="module">',`<script>const originalRequest=ZFAPPS.request; ZFAPPS.request=async o=>{if(o.method==='POST'){window.sentRequest=o; ${mode==='reject' ? "return {data:{status:400,body:JSON.stringify({code:14,message:'Credit Note rejected',details:[{field:'line_items[0].item_custom_fields',message:'Invalid values are given for creation'}]})}};" : mode==='network' ? "throw new Error('Network lost');" : "return {code:0,creditnote:{creditnote_id:'cn1',creditnote_number:'CN-1',status:'draft',total:2655}};"}}return originalRequest(o);};</script><script type="module">`);
   html=html.replace('renderLines();await connect();', 'renderLines();await connect();window.RAJADHANI_PREVIEW_CONFIG=null;');
   await route.fulfill({contentType:'text/html',body:html});
  });
@@ -35,7 +35,7 @@ test('creates a draft Credit Note with invoice line references and locks after s
  const request=await page.evaluate(()=>window.sentRequest);expect(request.url).toMatch(/\/creditnotes$/);const body=JSON.parse(request.body.raw);expect(body.is_draft).toBe(true);expect(body.custom_fields).toContainEqual({api_name:'cf_bill_type',value:'Credit'});expect(body.location_id).toBe('loc1');expect(body.line_items[0]).toMatchObject({invoice_id:'inv1',invoice_item_id:'il1',rate:250,discount:'10%',location_id:'loc2',item_custom_fields:[{api_name:'cf_billno',value:'INV-00124'},{api_name:'cf_ref_bill_date',value:'2026-09-18'}]});expect(body.line_items[0]).not.toHaveProperty('salesorder_item_id');await expect(page.locator('#saveButton')).toBeDisabled();
 });
 test('API rejection permits retry; ambiguous network result prevents duplicate submission',async({page})=>{
- await start(page,true,'reject');await bill(page);await review(page);await page.locator('#confirmSave').click();await expect(page.locator('#saveStatus')).toContainText('Credit Note rejected');await expect(page.locator('#confirmSave')).toBeEnabled();
+ await start(page,true,'reject');await bill(page);await review(page);await page.locator('#confirmSave').click();await expect(page.locator('#saveStatus')).toContainText('Credit Note rejected');await expect(page.locator('#confirmSave')).toBeEnabled();await expect(page.locator('#saveDebug')).toBeVisible();const debug=JSON.parse(await page.locator('#saveDebugText').inputValue());expect(debug.error.code).toBe(14);expect(debug.response.details[0].field).toBe('line_items[0].item_custom_fields');expect(debug.request.payload.custom_fields).toContainEqual({api_name:'cf_bill_type',value:'Credit'});expect(debug.sdk.envelope.data.status).toBe(400);
 });
 test('ambiguous network failure disables retry',async({page})=>{
  await start(page,true,'network');await bill(page);await review(page);await page.locator('#confirmSave').click();await expect(page.locator('#saveStatus')).toContainText('Could not confirm');await expect(page.locator('#confirmSave')).toBeDisabled();

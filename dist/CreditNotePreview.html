@@ -199,6 +199,8 @@ aside{min-width:0;overflow:visible;align-self:stretch}
 /* Dark green theme with readable white table headings. */
 #invoiceItemsCard th,#billDialog th{background:#164d35;color:#fff;border-color:#285f46}
 .billamount{background:#e8f2ec;border-color:#bed4c6}.billamount strong{color:#164d35}
+
+#reviewDialog{max-height:90vh;overflow-y:auto}#saveDebug{margin-top:12px}#saveDebug summary{cursor:pointer;font-weight:600}#saveDebugText{height:240px;font:11px/1.5 monospace;white-space:pre;overflow:auto;resize:vertical}#debugCopyStatus{display:block;margin-top:6px;font-size:11px}
 </style></head>
 <body>
 <header class="topbar compacttools"><span id="connectionStatus" class="status">Connecting to ERP</span><button type="button" class="iconbutton" id="settingsButton" aria-label="Connection settings">⚙</button><span class="avatar" id="avatar">R</span></header>
@@ -213,7 +215,7 @@ aside{min-width:0;overflow:visible;align-self:stretch}
 <section class="card itemsCard" id="invoiceItemsCard"><div class="sectionheading"><div><span class="step">02</span><h2>Credit Note items</h2><span id="lineCount" class="count">0</span></div><span class="subtle">Prices & stock from ERP</span></div><div class="cardbody"><div class="itemsearchrow"><div class="searchfield grow"><label class="sr-only" for="itemSearch">Search items</label><div class="searchbox"><span>⌕</span><input id="itemSearch" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="itemResults" placeholder="Search an item, SKU or scan a barcode…"><kbd>↵</kbd></div><div id="itemResults" class="results" role="listbox" hidden></div></div><button type="button" class="button" id="browseItems" hidden>＋ Browse items</button></div></div>
 <div class="tablewrap"><table><thead><tr><th>Item Code</th><th>Bill No</th><th>Ref Bill No</th><th>Ref Bill Date</th><th>Pieces / pack</th><th>Order Qty</th><th>Rate</th><th>Disc %</th><th>Tax</th><th>Amount</th></tr></thead><tbody id="lineItems"></tbody></table><div id="emptyItems" class="empty"><div class="emptyicon">▧</div><h3>Your credit note starts here</h3><p>Find an item above to add it to this credit note.</p><span>Search by name or SKU · Barcode scanner ready</span></div></div><div class="tablefooter"><span id="qtySummary">0 items · 0 total quantity</span><span>Amounts exclude tax</span></div></section>
 </div><aside><section class="card summary"><div class="sectionheading"><h2>Credit Note summary</h2><span class="currency" id="currencyLabel">INR</span></div><div class="cardbody"><div class="field"><label for="location">Godown <em>*</em></label><select id="location" required disabled><option value="">Loading warehouses…</option></select><small id="godownStatus" role="status"></small></div><div class="field remarks"><label for="notes">Remarks</label><textarea id="notes" rows="2" placeholder="Return reason or remarks"></textarea></div><div class="sideblocktitle summarytitle">Summary information</div><div class="summarygrid"><div class="summaryrow"><span>Total</span><strong id="subtotal">₹0.00</strong></div><div class="summaryrow"><span>Total Discount Amount</span><span class="green" id="discountAmount">− ₹0.00</span></div><div class="summaryrow"><span>Tax Amount</span><span id="taxTotal">₹0.00</span></div><div id="taxBreakdown"></div><div class="summaryrow"><span>Round off</span><span id="roundValue">₹0.00</span></div><div class="summaryrow billamount"><span>Credit Amount</span><strong id="grandTotal">₹0.00</strong></div></div><small id="totalDetail" class="totaldetail">0 items in this credit note</small><button class="button primary full" id="saveButton" type="submit">Submit credit note <span>→</span></button></div></section></aside></div></form><footer><span id="footerStatus">Zoho ERP widget</span></footer></main>
-<dialog id="reviewDialog"><div class="dialogheading"><div><div class="eyebrow">READY FOR A QUICK CHECK</div><h2>Review your credit note</h2></div><button type="button" class="iconbutton" data-close="reviewDialog" aria-label="Close review">×</button></div><div id="reviewContent"></div><div class="dialogactions"><button type="button" class="button" data-close="reviewDialog">Back to editing</button><button type="button" class="button primary" id="confirmSave">Save draft to ERP →</button></div><p id="saveStatus" role="status"></p></dialog>
+<dialog id="reviewDialog"><div class="dialogheading"><div><div class="eyebrow">READY FOR A QUICK CHECK</div><h2>Review your credit note</h2></div><button type="button" class="iconbutton" data-close="reviewDialog" aria-label="Close review">×</button></div><div id="reviewContent"></div><div class="dialogactions"><button type="button" class="button" data-close="reviewDialog">Back to editing</button><button type="button" class="button primary" id="confirmSave">Save draft to ERP →</button></div><p id="saveStatus" role="status"></p><details id="saveDebug" hidden><summary>Save debug report</summary><p>Includes transaction details and remarks. Authentication values are redacted.</p><textarea id="saveDebugText" readonly aria-label="Save debug report" spellcheck="false"></textarea><button type="button" class="button" id="copySaveDebug">Copy debug report</button><span id="debugCopyStatus" role="status"></span></details></dialog>
 <dialog id="billDialog" aria-labelledby="billTitle"><div class="dialogheading"><h2 id="billTitle">Item transactions</h2><button type="button" class="iconbutton" data-close="billDialog" aria-label="Close bills">×</button></div><label for="billFilter">Find bill or date</label><input id="billFilter" type="search" placeholder="Bill number, reference or date"><p id="billStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Bill No.</th><th>Reference</th><th>Date</th><th>Status</th><th>Billed qty</th><th>Rate</th><th></th></tr></thead><tbody id="billRows"></tbody></table></div></dialog>
 <dialog id="settingsDialog"><div class="dialogheading"><h2>ERP connection</h2><button class="iconbutton" type="button" data-close="settingsDialog" aria-label="Close settings">×</button></div><p>Use an authorized Zoho connection. Never enter passwords or access tokens here.</p><div class="field"><label for="connectionName">Connection link name</label><input id="connectionName" placeholder="Your authorized connection link name"></div><div class="field"><label for="orgId">Organization ID</label><input id="orgId" placeholder="Detected from Zoho ERP"></div><p class="subtle">These settings apply to this session. For deployment, update app/config.json and the manifest’s usedConnections. Business-field mappings are configured in app/config.json.</p><button type="button" class="button primary" id="connectButton">Connect & load ERP data</button></dialog>
 <script nomodule>document.body.textContent='Please open this widget in a current browser.';</script><script>// Preview fixtures only. This file is never included in the ERP widget ZIP.
@@ -450,9 +452,23 @@ function decodeResponse(response) {
   if (typeof body === 'string') body = JSON.parse(body);
   if (!body || typeof body !== 'object') throw new Error('ERP returned an unreadable response.');
   if (body.code != null && Number(body.code) !== 0) {
-    const err = new Error(body.message || `ERP error ${body.code}`); err.apiRejected = true; throw err;
+    const err = new Error(body.message || `ERP error ${body.code}`); err.apiRejected = true; err.erpCode = body.code; err.erpResponse = body; throw err;
   }
   return body;
+}
+
+// Reports stay in memory; remove authentication material even if echoed by the SDK.
+function diagnosticJSON(value) {
+  const seen = new WeakSet();
+  return JSON.stringify(value, (key, entry) => {
+    if (/authorization|cookie|token|password|secret|api[_-]?key/i.test(key)) return '[REDACTED]';
+    if (typeof entry === 'string') return entry.replace(/(Zoho-oauthtoken|Bearer)\s+[^\s"',}]+/gi, '$1 [REDACTED]');
+    if (entry && typeof entry === 'object') {
+      if (seen.has(entry)) return '[Circular]';
+      seen.add(entry);
+    }
+    return entry;
+  }, 2);
 }
 
 class ERP {
@@ -492,9 +508,15 @@ class ERP {
       options.header = [{ key: 'Content-Type', value: 'application/json' }];
       options.body = { mode: 'raw', raw: JSON.stringify(payload) };
     }
+    let response;
     try {
-      return decodeResponse(await this.sdk.request(options));
+      response = await this.sdk.request(options);
+      const decoded = decodeResponse(response);
+      if (method === 'POST' && path === '/creditnotes') this.lastCreateResponse = response;
+      return decoded;
     } catch (err) {
+      if (!(err instanceof Error)) err = Object.assign(new Error(typeof err === 'string' ? err : err?.message || 'SDK request failed'), {sdkError: err});
+      err.requestDiagnostics = {method, url: options.url, query: Object.fromEntries(options.url_query.map(q=>[q.key,q.value])), payload, response: response ?? err.sdkError ?? err.response ?? err.data ?? null, originalMessage: err.message};
       if (/not authorized|permission|oauth|scope/i.test(err.message || '')) {
         const scope = path.startsWith('/contacts') ? 'ERP.contacts.READ' : path.startsWith('/salesorders') ? 'ERP.salesorders.READ' : path.startsWith('/creditnotes') ? 'ERP.creditnotes.CREATE' : path.startsWith('/invoices') ? 'ERP.invoices.READ' : 'ERP.settings.READ';
         err.message = `Access denied for ${path}. Check ${scope} in erp_admin, reauthorize the connection for the current user, and verify access to organization ${this.config.organizationId}.`;
@@ -976,16 +998,37 @@ $('invoiceForm').addEventListener('submit',e=>{
   $('reviewContent').innerHTML=`<div class="summaryrow"><span>Customer</span><strong>${esc(state.customer.contact_name)}</strong></div><div class="summaryrow"><span>Credit Note date</span><strong>${esc(v.date)}</strong></div><div class="summaryrow"><span>Godown</span><strong>${esc(selectedGodown()?.location_name || '')}</strong></div>${state.lines.map(l=>`<div class="summaryrow"><span>${esc(l.name)} · Bill ${esc(l.sourceBill?.number)} (${esc(l.sourceBill?.date)}) · ${l.quantity} × ${l.pieces ?? "?"} = ${l.pieces ? pieceQuantity(l) : "?"} pieces · ${l.discount ?? 0}% discount (${esc(money(lineAmounts(l).discount))})</span><strong>${esc(money(lineAmounts(l).taxable))}</strong></div>`).join('')}<div class="summaryrow"><span>Total Discount Amount</span><strong>${esc(money(t.discount))}</strong></div><div class="grandtotal"><span>Estimated credit note total</span><strong>${esc(money(t.total))}</strong></div><p>This creates a draft credit note. It does not email the customer. ERP will calculate the final total.</p>`;
   $('saveStatus').textContent='';$('confirmSave').disabled=!!window.RAJADHANI_PREVIEW_CONFIG;if(window.RAJADHANI_PREVIEW_CONFIG)$('saveStatus').textContent='Preview only. No records will be created.';$('reviewDialog').showModal();
 });
+function showSaveDiagnostics(err) {
+  const report = {
+    widget: 'Rajadhani Credit Note', diagnosticVersion: 1, time: new Date().toISOString(),
+    error: {message: err.message, name: err.name, code: err.erpCode ?? null, apiRejected: !!err.apiRejected},
+    request: {method: 'POST', url: `${config.apiBase}/creditnotes`, organizationId: config.organizationId, payload: approvedPayload},
+    response: err.erpResponse ?? err.requestDiagnostics?.response ?? api.lastCreateResponse ?? null,
+    sdk: err.requestDiagnostics ? {originalMessage: err.requestDiagnostics.originalMessage, envelope: err.requestDiagnostics.response} : null,
+    configuration: {quantityMode: config.invoiceQuantityMode, lineCustomFields: config.lineCustomFields, customFields: config.customFields},
+    godown: selectedGodown() || null,
+    sourceLines: state.lines.map((line,index)=>({row:index+1,itemId:line.item_id,code:line.sku,orderQuantity:line.quantity,piecesPerPack:line.pieces,rate:line.rate,discount:line.discount,tax:line.tax,sourceBill:line.sourceBill})),
+    note: 'Includes customer IDs, transaction data and entered notes. Authentication values are redacted. No data is sent by copying this report.'
+  };
+  $('saveDebugText').value=diagnosticJSON(report);
+  $('saveDebug').hidden=false; $('saveDebug').open=true;
+  $('debugCopyStatus').textContent='';
+}
+$('copySaveDebug').onclick=async()=>{
+  const text=$('saveDebugText').value;
+  try { await navigator.clipboard.writeText(text); $('debugCopyStatus').textContent='Debug report copied.'; }
+  catch { $('saveDebugText').focus(); $('saveDebugText').select(); $('debugCopyStatus').textContent='Report selected. Press Ctrl+C or ⌘C to copy.'; }
+};
 $('confirmSave').onclick=async()=>{
   if(state.busy||state.saved||state.uncertain||!approvedPayload||window.RAJADHANI_PREVIEW_CONFIG)return;
-  state.busy=true;$('confirmSave').disabled=true;$('saveStatus').textContent='Saving credit note to ERP…';
+  state.busy=true;api.lastCreateResponse=null;$('saveDebug').hidden=true;$('confirmSave').disabled=true;$('saveStatus').textContent='Saving credit note to ERP…';
   try{const result=await api.createCreditNote(approvedPayload);if(!result.creditnote?.creditnote_id)throw new Error('ERP did not return a Credit Note ID.');
     state.saved=true;$('reviewDialog').close();$('invoiceNumber').value=result.creditnote.creditnote_number || result.creditnote.creditnote_id;$('saveButton').disabled=true;$('saveButton').textContent='Saved to ERP ✓';
     notice(`Credit Note ${result.creditnote.creditnote_number || result.creditnote.creditnote_id} saved in ERP (${result.creditnote.status || 'created'}). Final total: ${money(Number(result.creditnote.total))}.`,'success');
     $('invoiceForm').querySelectorAll('input,select,textarea,button').forEach(e=>e.disabled=true);
     state.allowClose=true;
     exitAfterSave(result.creditnote.creditnote_id);
-  }catch(e){if(e.apiRejected){$('saveStatus').textContent=e.message;$('confirmSave').disabled=false;}else{state.uncertain=true;$('saveButton').disabled=true;$('saveStatus').textContent='Could not confirm the result. Check the ERP Credit Note list before starting again to avoid a duplicate. '+e.message;}}finally{state.busy=false;}
+  }catch(e){showSaveDiagnostics(e);if(e.apiRejected){$('saveStatus').textContent=`${e.message}${e.erpCode != null ? ` (ERP code ${e.erpCode})` : ''}. See the debug report below.`;$('confirmSave').disabled=false;}else{state.uncertain=true;$('saveButton').disabled=true;$('saveStatus').textContent='Could not confirm the result. Check the ERP Credit Note list before starting again to avoid a duplicate. '+e.message;}}finally{state.busy=false;}
 };
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('customerSearch').focus();}});
 window.addEventListener('beforeunload',e=>{if(hasUnsavedWork()){e.preventDefault();e.returnValue='';}});

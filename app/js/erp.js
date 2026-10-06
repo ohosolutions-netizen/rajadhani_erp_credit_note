@@ -36,9 +36,15 @@ export class ERP {
       options.header = [{ key: 'Content-Type', value: 'application/json' }];
       options.body = { mode: 'raw', raw: JSON.stringify(payload) };
     }
+    let response;
     try {
-      return decodeResponse(await this.sdk.request(options));
+      response = await this.sdk.request(options);
+      const decoded = decodeResponse(response);
+      if (method === 'POST' && path === '/creditnotes') this.lastCreateResponse = response;
+      return decoded;
     } catch (err) {
+      if (!(err instanceof Error)) err = Object.assign(new Error(typeof err === 'string' ? err : err?.message || 'SDK request failed'), {sdkError: err});
+      err.requestDiagnostics = {method, url: options.url, query: Object.fromEntries(options.url_query.map(q=>[q.key,q.value])), payload, response: response ?? err.sdkError ?? err.response ?? err.data ?? null, originalMessage: err.message};
       if (/not authorized|permission|oauth|scope/i.test(err.message || '')) {
         const scope = path.startsWith('/contacts') ? 'ERP.contacts.READ' : path.startsWith('/salesorders') ? 'ERP.salesorders.READ' : path.startsWith('/creditnotes') ? 'ERP.creditnotes.CREATE' : path.startsWith('/invoices') ? 'ERP.invoices.READ' : 'ERP.settings.READ';
         err.message = `Access denied for ${path}. Check ${scope} in erp_admin, reauthorize the connection for the current user, and verify access to organization ${this.config.organizationId}.`;
