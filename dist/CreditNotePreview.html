@@ -421,9 +421,17 @@ function customerInvoiceType(customer) {
 function makePayload(state, values, config) {
   const intraState = values.place_of_supply === (config.organizationStateCode || 'KL');
   const totals = calculate(state.lines, values.rounded, intraState);
+  const invoiceIds = [...new Set(state.lines.filter(l => !l.notFound).map(l => l.sourceBill.invoiceId))];
+  const linkedInvoice = invoiceIds.length === 1 ? invoiceIds[0] : null;
+  const godown = (state.warehouses || []).find(w => String(w.location_id) === String(values.location_id));
   const payload = {
     is_draft: true,
-    reference_invoice_type: customerInvoiceType(state.customer).value,
+    reference_invoice_type: linkedInvoice ? '' : customerInvoiceType(state.customer).value,
+    ...(linkedInvoice ? {invoice_id: String(linkedInvoice)} : {}),
+    ...(godown?.autonumbergenerationgroup_id ? {autonumbergenerationgroup_id: String(godown.autonumbergenerationgroup_id)} : {}),
+    gst_treatment: state.customer.gst_treatment || (String(state.customer.gst_no || '').trim() ? 'business_gst' : 'consumer'),
+    gst_no: String(state.customer.gst_no || '').trim(),
+    gst_reason: 'others',
     customer_id: String(state.customer.contact_id), date: values.date,
     place_of_supply: values.place_of_supply,
     line_items: state.lines.filter(l => !l.notFound).map((l, index) => {
@@ -431,14 +439,18 @@ function makePayload(state, values, config) {
       const taxId = preferredTax?.tax_id || preferredTax?.tax_group_id || (l.sourceBill || !l.taxPreferences?.length ? l.tax?.id : null);
       return ({
       item_id: String(l.item_id), quantity: config.invoiceQuantityMode === 'pieces' ? pieceQuantity(l) : l.quantity, rate: config.invoiceQuantityMode === 'order' ? l.rate * (l.pieces ?? 1) : l.rate, item_order: index + 1,
-      discount: `${l.discount ?? 0}%`,
+      discount: Number(l.discount || 0) === 0 ? 0 : `${l.discount}%`,
       ...(taxId ? { tax_id: String(taxId) } : { tax_exemption_id: l.tax_exemption_id }),
-      invoice_id: String(l.sourceBill.invoiceId), invoice_item_id: String(l.sourceBill.lineId),
+      invoice_id: linkedInvoice ? '' : String(l.sourceBill.invoiceId), invoice_item_id: linkedInvoice ? '' : String(l.sourceBill.lineId),
+      is_item_shipped: false, is_returned_to_stock: true,
+      ...(l.sourceBill.accountId ? {account_id: l.sourceBill.accountId} : {}),
+      ...(l.sourceBill.unit ? {unit: l.sourceBill.unit} : {}),
+      ...(l.sourceBill.hsn ? {hsn_or_sac: l.sourceBill.hsn} : {}),
       description: `Bill ${l.sourceBill.number} | Ref ${l.sourceBill.reference || '—'} | ${l.sourceBill.date}`,
       ...(values.godown_id ? {location_id: String(values.godown_id)} : {}),
       item_custom_fields: Object.entries(config.lineCustomFields || {}).map(([key, mapping]) => {
         if (!mapping.id && !mapping.apiName) throw new Error(`Configure the API name or ID for line field ${mapping.label}.`);
-        return {...(mapping.id ? {customfield_id: String(mapping.id)} : {api_name: mapping.apiName}), value: key === 'billNo' ? l.sourceBill.number : l.sourceBill.date};
+        return {...(mapping.label ? {label: mapping.label} : mapping.id ? {customfield_id: String(mapping.id)} : {api_name: mapping.apiName}), value: key === 'billNo' ? l.sourceBill.number : l.sourceBill.date};
       })
     });}),
     discount_type: 'item_level', is_discount_before_tax: true, is_inclusive_tax: false,
@@ -592,6 +604,7 @@ class ERP {
           const gross=quantity*rate;
           const discount = typeof line.discount === 'string' && line.discount.includes('%') ? parseFloat(line.discount) : Number(line.discount_amount ?? line.discount ?? 0) / (gross || 1) * 100;
           rows.push({invoiceId:String(invoice.invoice_id),lineId:String(line.line_item_id || ''),customerId:String(invoice.customer_id),number:invoice.invoice_number || invoice.invoice_id,reference:invoice.reference_number || '',date:invoice.date,status:invoice.status,quantity,rate,discount,
+            accountId:line.account_id,unit:line.unit,hsn:line.hsn_or_sac,
             taxId:String(line.tax_id || line.tax_group_id || ''),taxName:line.tax_name,taxPercentage:Number(line.tax_percentage || 0),exemption:line.tax_exemption_id,locationId:line.location_id || invoice.location_id,currency:invoice.currency_code,supply:invoice.place_of_supply,inclusive:invoice.is_inclusive_tax,headerDiscount:invoice.discount_type === 'entity_level' && Number(invoice.discount_total || invoice.discount || 0) !== 0,
             selectable:!['draft','void','cancelled'].includes(invoice.status) && !!line.line_item_id && quantity>0 && Number.isFinite(rate) && Number.isFinite(discount)});
         }
@@ -600,10 +613,7 @@ class ERP {
     return rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   }
   createCreditNote(payload) {
-    const invoices = [...new Set(payload.line_items.map(line=>line.invoice_id).filter(Boolean))];
-    const query = {ignore_auto_number_generation: false};
-    if (invoices.length === 1 && payload.line_items.every(line=>line.invoice_id === invoices[0])) query.invoice_id = invoices[0];
-    return this.request('/creditnotes', query, 'POST', payload);
+    return this.request('/creditnotes', {}, 'POST', payload);
   }
   async inspectCreation(payload) {
     const checks = [];
@@ -612,7 +622,7 @@ class ERP {
       catch(e) { checks.push({label,path,query,error:e.message,response:e.erpResponse || e.requestDiagnostics?.response || null}); return null; }
     };
     await read('Customer', `/contacts/${encodeURIComponent(payload.customer_id)}`);
-    const invoices=[...new Set(payload.line_items.map(l=>l.invoice_id).filter(Boolean))];
+    const invoices=[...new Set([payload.invoice_id,...payload.line_items.map(l=>l.invoice_id)].filter(Boolean))];
     for(const id of invoices.slice(0,5)) await read('Source invoice', `/invoices/${encodeURIComponent(id)}`);
     const items=[...new Set(payload.line_items.map(l=>l.item_id).filter(Boolean))];
     for(const id of items.slice(0,5)) await read('Item master', `/items/${encodeURIComponent(id)}`);

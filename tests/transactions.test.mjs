@@ -23,7 +23,7 @@ test('references and aggregate quantities validated; payload uses draft and orig
  assert.ok(core.validateCreditNote({...state,lines:[line,line]},values,config).some(e=>e.includes('exceeds billed')));
  assert.ok(core.validateCreditNote({...state,lines:[{...line,sourceBill:null}]},values,config).some(e=>e.includes('original bill')));
  assert.ok(core.validateCreditNote({...state,customer:{contact_id:'other'}},values,config).some(e=>e.includes('different customer')));
- const payload=core.makePayload(state,values,config);assert.equal(payload.is_draft,true);assert.equal(payload.line_items[0].invoice_id,'i1');assert.equal(payload.line_items[0].invoice_item_id,'l1');
+ const payload=core.makePayload(state,values,config);assert.equal(payload.is_draft,true);assert.equal(payload.invoice_id,'i1');assert.equal(payload.line_items[0].invoice_id,'');assert.equal(payload.line_items[0].invoice_item_id,'');assert.equal(payload.reference_invoice_type,'');
 });
 
 test('selected Godown overrides source location and line fields preserve bill number/date',()=>{
@@ -34,7 +34,7 @@ test('selected Godown overrides source location and line fields preserve bill nu
  assert.deepEqual(core.validateCreditNote(state,values,config),[]);
  const payload=core.makePayload(state,values,config);
  assert.equal(payload.location_id,'parent-branch');assert.equal(payload.line_items[0].location_id,'new-warehouse');assert.equal(payload.notes,'Returned damaged');
- assert.deepEqual(payload.line_items[0].item_custom_fields,[{customfield_id:'123',value:'INV-001'},{api_name:'cf_ref_bill_date',value:'2026-09-01'}]);
+ assert.deepEqual(payload.line_items[0].item_custom_fields,[{label:'BillNO',value:'INV-001'},{label:'Ref_Bill Date',value:'2026-09-01'}]);
  assert.ok(core.validateCreditNote(state,{...values,godown_id:''},config).includes('Select a Godown.'));
  const missing={...config,lineCustomFields:{billNo:{label:'BillNO',id:''}}};
  assert.ok(core.validateCreditNote(state,values,missing).some(e=>e.includes('BillNO')));
@@ -44,7 +44,7 @@ test('selected Godown overrides source location and line fields preserve bill nu
 test('single-invoice create includes invoice context; mixed invoices do not get a false context',async()=>{
  const api=new ERP({},{}),calls=[];api.request=async(...args)=>{calls.push(args);return {};};
  const payload={line_items:[{invoice_id:'inv1'},{invoice_id:'inv1'}]};await api.createCreditNote(payload);
- assert.deepEqual(calls[0],['/creditnotes',{ignore_auto_number_generation:false,invoice_id:'inv1'},'POST',payload]);
+ assert.deepEqual(calls[0],['/creditnotes',{},'POST',payload]);
  await api.createCreditNote({line_items:[{invoice_id:'inv1'},{invoice_id:'inv2'}]});assert.equal(calls[1][1].invoice_id,undefined);
 });
 test('inspection only reads bounded source records and records permission failures',async()=>{
@@ -65,4 +65,18 @@ test('Invoice Type follows customer GSTIN and never the shipping GSTIN or Bill t
   assert.equal(core.customerInvoiceType(customer).label,registered?'Registered':'B2C others');
   assert.deepEqual(payload.custom_fields,[{customfield_id:'bill-type',value:'Cash'}]);
  }
+});
+
+
+test('native creation context uses selected location series, GST and stock return fields; mixed bills retain links',()=>{
+ const sourceBill={invoiceId:'invoice-a',lineId:'line-a',number:'INV-A',date:'2026-10-01',accountId:'sales-account',unit:'pcs',hsn:'620442'};
+ const line={item_id:'item',quantity:1,pieces:5,rate:1120,discount:0,sourceBill};
+ const state={customer:{contact_id:'customer',gst_no:'32ABCDE1234F1Z5',gst_treatment:'business_gst'},warehouses:[{location_id:'branch',autonumbergenerationgroup_id:'series'}],lines:[line]};
+ const values={date:'2026-10-07',place_of_supply:'KL',location_id:'branch',godown_id:'warehouse',custom:{}};
+ const config={customFields:{},invoiceQuantityMode:'pieces'};
+ const p=core.makePayload(state,values,config);
+ assert.equal(p.invoice_id,'invoice-a');assert.equal(p.autonumbergenerationgroup_id,'series');assert.equal(p.gst_treatment,'business_gst');assert.equal(p.gst_no,state.customer.gst_no);assert.equal(p.gst_reason,'others');
+ assert.equal(p.line_items[0].quantity,5);assert.equal(p.line_items[0].account_id,'sales-account');assert.equal(p.line_items[0].unit,'pcs');assert.equal(p.line_items[0].hsn_or_sac,'620442');assert.equal(p.line_items[0].is_returned_to_stock,true);assert.equal(p.line_items[0].is_item_shipped,false);
+ const mixed=core.makePayload({...state,lines:[line,{...line,sourceBill:{...sourceBill,invoiceId:'invoice-b',lineId:'line-b'}}]},values,config);
+ assert.equal(mixed.invoice_id,undefined);assert.equal(mixed.reference_invoice_type,'registered');assert.deepEqual(mixed.line_items.map(l=>[l.invoice_id,l.invoice_item_id]),[['invoice-a','line-a'],['invoice-b','line-b']]);
 });

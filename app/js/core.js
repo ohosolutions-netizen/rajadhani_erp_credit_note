@@ -146,9 +146,17 @@ export function customerInvoiceType(customer) {
 export function makePayload(state, values, config) {
   const intraState = values.place_of_supply === (config.organizationStateCode || 'KL');
   const totals = calculate(state.lines, values.rounded, intraState);
+  const invoiceIds = [...new Set(state.lines.filter(l => !l.notFound).map(l => l.sourceBill.invoiceId))];
+  const linkedInvoice = invoiceIds.length === 1 ? invoiceIds[0] : null;
+  const godown = (state.warehouses || []).find(w => String(w.location_id) === String(values.location_id));
   const payload = {
     is_draft: true,
-    reference_invoice_type: customerInvoiceType(state.customer).value,
+    reference_invoice_type: linkedInvoice ? '' : customerInvoiceType(state.customer).value,
+    ...(linkedInvoice ? {invoice_id: String(linkedInvoice)} : {}),
+    ...(godown?.autonumbergenerationgroup_id ? {autonumbergenerationgroup_id: String(godown.autonumbergenerationgroup_id)} : {}),
+    gst_treatment: state.customer.gst_treatment || (String(state.customer.gst_no || '').trim() ? 'business_gst' : 'consumer'),
+    gst_no: String(state.customer.gst_no || '').trim(),
+    gst_reason: 'others',
     customer_id: String(state.customer.contact_id), date: values.date,
     place_of_supply: values.place_of_supply,
     line_items: state.lines.filter(l => !l.notFound).map((l, index) => {
@@ -156,14 +164,18 @@ export function makePayload(state, values, config) {
       const taxId = preferredTax?.tax_id || preferredTax?.tax_group_id || (l.sourceBill || !l.taxPreferences?.length ? l.tax?.id : null);
       return ({
       item_id: String(l.item_id), quantity: config.invoiceQuantityMode === 'pieces' ? pieceQuantity(l) : l.quantity, rate: config.invoiceQuantityMode === 'order' ? l.rate * (l.pieces ?? 1) : l.rate, item_order: index + 1,
-      discount: `${l.discount ?? 0}%`,
+      discount: Number(l.discount || 0) === 0 ? 0 : `${l.discount}%`,
       ...(taxId ? { tax_id: String(taxId) } : { tax_exemption_id: l.tax_exemption_id }),
-      invoice_id: String(l.sourceBill.invoiceId), invoice_item_id: String(l.sourceBill.lineId),
+      invoice_id: linkedInvoice ? '' : String(l.sourceBill.invoiceId), invoice_item_id: linkedInvoice ? '' : String(l.sourceBill.lineId),
+      is_item_shipped: false, is_returned_to_stock: true,
+      ...(l.sourceBill.accountId ? {account_id: l.sourceBill.accountId} : {}),
+      ...(l.sourceBill.unit ? {unit: l.sourceBill.unit} : {}),
+      ...(l.sourceBill.hsn ? {hsn_or_sac: l.sourceBill.hsn} : {}),
       description: `Bill ${l.sourceBill.number} | Ref ${l.sourceBill.reference || '—'} | ${l.sourceBill.date}`,
       ...(values.godown_id ? {location_id: String(values.godown_id)} : {}),
       item_custom_fields: Object.entries(config.lineCustomFields || {}).map(([key, mapping]) => {
         if (!mapping.id && !mapping.apiName) throw new Error(`Configure the API name or ID for line field ${mapping.label}.`);
-        return {...(mapping.id ? {customfield_id: String(mapping.id)} : {api_name: mapping.apiName}), value: key === 'billNo' ? l.sourceBill.number : l.sourceBill.date};
+        return {...(mapping.label ? {label: mapping.label} : mapping.id ? {customfield_id: String(mapping.id)} : {api_name: mapping.apiName}), value: key === 'billNo' ? l.sourceBill.number : l.sourceBill.date};
       })
     });}),
     discount_type: 'item_level', is_discount_before_tax: true, is_inclusive_tax: false,

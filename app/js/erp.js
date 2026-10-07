@@ -114,6 +114,7 @@ export class ERP {
           const gross=quantity*rate;
           const discount = typeof line.discount === 'string' && line.discount.includes('%') ? parseFloat(line.discount) : Number(line.discount_amount ?? line.discount ?? 0) / (gross || 1) * 100;
           rows.push({invoiceId:String(invoice.invoice_id),lineId:String(line.line_item_id || ''),customerId:String(invoice.customer_id),number:invoice.invoice_number || invoice.invoice_id,reference:invoice.reference_number || '',date:invoice.date,status:invoice.status,quantity,rate,discount,
+            accountId:line.account_id,unit:line.unit,hsn:line.hsn_or_sac,
             taxId:String(line.tax_id || line.tax_group_id || ''),taxName:line.tax_name,taxPercentage:Number(line.tax_percentage || 0),exemption:line.tax_exemption_id,locationId:line.location_id || invoice.location_id,currency:invoice.currency_code,supply:invoice.place_of_supply,inclusive:invoice.is_inclusive_tax,headerDiscount:invoice.discount_type === 'entity_level' && Number(invoice.discount_total || invoice.discount || 0) !== 0,
             selectable:!['draft','void','cancelled'].includes(invoice.status) && !!line.line_item_id && quantity>0 && Number.isFinite(rate) && Number.isFinite(discount)});
         }
@@ -122,10 +123,7 @@ export class ERP {
     return rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   }
   createCreditNote(payload) {
-    const invoices = [...new Set(payload.line_items.map(line=>line.invoice_id).filter(Boolean))];
-    const query = {ignore_auto_number_generation: false};
-    if (invoices.length === 1 && payload.line_items.every(line=>line.invoice_id === invoices[0])) query.invoice_id = invoices[0];
-    return this.request('/creditnotes', query, 'POST', payload);
+    return this.request('/creditnotes', {}, 'POST', payload);
   }
   async inspectCreation(payload) {
     const checks = [];
@@ -134,7 +132,7 @@ export class ERP {
       catch(e) { checks.push({label,path,query,error:e.message,response:e.erpResponse || e.requestDiagnostics?.response || null}); return null; }
     };
     await read('Customer', `/contacts/${encodeURIComponent(payload.customer_id)}`);
-    const invoices=[...new Set(payload.line_items.map(l=>l.invoice_id).filter(Boolean))];
+    const invoices=[...new Set([payload.invoice_id,...payload.line_items.map(l=>l.invoice_id)].filter(Boolean))];
     for(const id of invoices.slice(0,5)) await read('Source invoice', `/invoices/${encodeURIComponent(id)}`);
     const items=[...new Set(payload.line_items.map(l=>l.item_id).filter(Boolean))];
     for(const id of items.slice(0,5)) await read('Item master', `/items/${encodeURIComponent(id)}`);
