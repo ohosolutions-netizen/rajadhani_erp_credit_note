@@ -156,7 +156,7 @@ async function openBills(line) {
       const r = rows[Number(button.dataset.transaction)]; if (!r?.selectable) return;
       try {
         if (r.currency && r.currency !== state.currency) throw new Error('The invoice currency differs from this credit note.');
-        if (r.headerDiscount) throw new Error('Invoice-level discounts require the native ERP Credit Note editor.');
+        if (r.discountError) throw new Error(r.discountError);
         if (r.inclusive) throw new Error('Tax-inclusive invoices require the native ERP Credit Note editor.');
         if (r.supply && r.supply !== $('placeOfSupply').value.trim().toUpperCase()) throw new Error('The invoice place of supply differs. Match the credit note place of supply before selecting this bill.');
         const divisor = config.invoiceQuantityMode === 'order' ? Number(line.pieces) : 1;

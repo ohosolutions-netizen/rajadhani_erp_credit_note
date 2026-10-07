@@ -112,10 +112,21 @@ export class ERP {
           if (String(line.item_id) !== String(itemId)) continue;
           const quantity=Number(line.quantity), rate=Number(line.rate);
           const gross=quantity*rate;
-          const discount = typeof line.discount === 'string' && line.discount.includes('%') ? parseFloat(line.discount) : Number(line.discount_amount ?? line.discount ?? 0) / (gross || 1) * 100;
+          let discount = typeof line.discount === 'string' && line.discount.includes('%') ? parseFloat(line.discount) : Number(line.discount_amount ?? line.discount ?? 0) / (gross || 1) * 100;
+          const headerDiscount = invoice.discount_type === 'entity_level' && Number(invoice.discount_total || parseFloat(invoice.discount) || 0) !== 0;
+          let discountError = '';
+          if (headerDiscount) {
+            const basis = invoice.line_items.reduce((sum, row) => sum + Number(row.quantity) * Number(row.rate), 0);
+            const explicitPercent = typeof invoice.discount === 'string' && invoice.discount.includes('%') ? parseFloat(invoice.discount) : null;
+            const amount = Number(invoice.discount_total ?? invoice.discount_amount ?? invoice.discount);
+            const percent = explicitPercent ?? (basis > 0 ? amount / basis * 100 : NaN);
+            if (invoice.is_discount_before_tax === false) discountError = 'This invoice applies its discount after tax. Use the native ERP editor to preserve its tax calculation.';
+            else if (!Number.isFinite(percent) || percent < 0 || percent > 100) discountError = 'The invoice discount could not be calculated from its ERP totals.';
+            else discount = percent;
+          }
           rows.push({invoiceId:String(invoice.invoice_id),lineId:String(line.line_item_id || ''),customerId:String(invoice.customer_id),number:invoice.invoice_number || invoice.invoice_id,reference:invoice.reference_number || '',date:invoice.date,status:invoice.status,quantity,rate,discount,
             accountId:line.account_id,unit:line.unit,hsn:line.hsn_or_sac,
-            taxId:String(line.tax_id || line.tax_group_id || ''),taxName:line.tax_name,taxPercentage:Number(line.tax_percentage || 0),exemption:line.tax_exemption_id,locationId:line.location_id || invoice.location_id,currency:invoice.currency_code,supply:invoice.place_of_supply,inclusive:invoice.is_inclusive_tax,headerDiscount:invoice.discount_type === 'entity_level' && Number(invoice.discount_total || invoice.discount || 0) !== 0,
+            taxId:String(line.tax_id || line.tax_group_id || ''),taxName:line.tax_name,taxPercentage:Number(line.tax_percentage || 0),exemption:line.tax_exemption_id,locationId:line.location_id || invoice.location_id,currency:invoice.currency_code,supply:invoice.place_of_supply,inclusive:invoice.is_inclusive_tax,headerDiscount,discountError,
             selectable:!['draft','void','cancelled'].includes(invoice.status) && !!line.line_item_id && quantity>0 && Number.isFinite(rate) && Number.isFinite(discount)});
         }
       }

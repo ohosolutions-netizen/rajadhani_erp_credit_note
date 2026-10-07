@@ -80,3 +80,15 @@ test('native creation context uses selected location series, GST and stock retur
  const mixed=core.makePayload({...state,lines:[line,{...line,sourceBill:{...sourceBill,invoiceId:'invoice-b',lineId:'line-b'}}]},values,config);
  assert.equal(mixed.invoice_id,undefined);assert.equal(mixed.reference_invoice_type,'registered');assert.deepEqual(mixed.line_items.map(l=>[l.invoice_id,l.invoice_item_id]),[['invoice-a','line-a'],['invoice-b','line-b']]);
 });
+
+
+test('invoice-wide discount is allocated proportionally across returned items, not charged in full',async()=>{
+ const api=new ERP({},{});
+ let invoice={invoice_id:'inv',customer_id:'c',status:'sent',discount_type:'entity_level',is_discount_before_tax:true,discount_total:150,line_items:[{item_id:'a',line_item_id:'la',quantity:10,rate:100},{item_id:'b',line_item_id:'lb',quantity:5,rate:100}]};
+ api.request=async path=>path==='/invoices'?{invoices:[{invoice_id:'inv'}]}:{invoice};
+ const [a]=await api.itemTransactions('c','a');const [b]=await api.itemTransactions('c','b');
+ assert.equal(a.discount,10);assert.equal(b.discount,10);assert.equal(a.discountError,'');
+ assert.equal(core.lineAmounts({quantity:2,pieces:1,rate:a.rate,discount:a.discount}).discount,20);
+ invoice={...invoice,discount:'12.5%',discount_total:187.5};assert.equal((await api.itemTransactions('c','a'))[0].discount,12.5);
+ invoice={...invoice,is_discount_before_tax:false};assert.match((await api.itemTransactions('c','a'))[0].discountError,/after tax/);
+});
