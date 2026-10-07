@@ -75,7 +75,7 @@ Bill type is configured with document custom-field API name `cf_bill_type`. The 
 
 A failed save expands a copyable debug report below the error in the review dialog. It contains the exact approved POST payload, ERP code and complete response body/SDK envelope, selected Godown, source invoice lines, packing and custom-field mappings. Authentication keys are redacted. Reports stay in page memory; copying does not transmit them. If Zoho supplies only a generic error, the report preserves that limitation rather than inventing a field-level cause.
 
-The tenant-confirmed numeric IDs are now used in REST creation payloads: Bill type `4160832000001021023`, Bill No `4160832000001016028`, Ref Bill Date `4160832000001015010`. API names remain in configuration for reference; numeric IDs take precedence. Live creation must be retried in Zoho to confirm whether this resolves error code 6.
+The numeric IDs observed in the saved native Credit Note RFCN00002 are now used in REST creation payloads: Bill type `4160832000001021023`, Bill No `4160832000001016029`, Ref Bill Date `4160832000001015013`. API names remain in configuration for reference; numeric IDs take precedence. Live creation must be retried in Zoho to confirm whether this resolves error code 6.
 
 ## Code 6 investigation — diagnostic version 2
 
@@ -86,3 +86,6 @@ After a failed save, **Inspect ERP records (read only)** collects the customer, 
 ## Automatic Invoice Type
 
 The widget displays Invoice Type from the selected customer's trimmed `gst_no`: **Registered** when present, **B2C others** when absent. Creation sends `reference_invoice_type` as `registered` / `b2cs` respectively. This rule is independent of shipping GSTIN and the Cash/Credit Bill type custom field. It is the requested two-way rule, not a general GST classification engine. Zoho documents the display categories in https://www.zoho.com/in/books/kb/import-export/ref-inv-type-invalid.html; the ERP REST reference omits this field, so acceptance of these wire values still requires live tenant verification. The existing generic code 6 rejection is not yet confirmed resolved.
+
+
+The October 7 native draft comparison confirmed that the originally supplied line field IDs differed from the IDs returned on the saved Credit Note. Configuration now uses Bill No `4160832000001016029` and Ref Bill Date `4160832000001015013`. Bill Type remains `4160832000001021023`. This corrects the observed mapping mismatch; live creation success is still unverified.
